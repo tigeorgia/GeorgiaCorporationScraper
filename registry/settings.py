@@ -11,5 +11,6 @@ BOT_NAME = 'registry'
 SPIDER_MODULES = ['registry.spiders']
 NEWSPIDER_MODULE = 'registry.spiders'
 
+#COOKIES_DEBUG = True
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'registry (+http://www.yourdomain.com)'

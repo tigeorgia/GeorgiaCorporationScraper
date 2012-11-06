@@ -5,7 +5,11 @@
 
 from scrapy.item import Item, Field
 
-class RegistryItem(Item):
-    # define the fields for your item here like:
-    # name = Field()
-    pass
+class Corporation(Item):
+    classification = Field()
+    id_code_url = Field()
+    id_code_legal = Field()
+    personal_code = Field() # Mainly (solely?) for individual entrepreneurs.
+    state_reg_code = Field()
+    name = Field()
+    status = Field()
