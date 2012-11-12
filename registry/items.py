@@ -9,6 +9,7 @@ class Corporation(Item):
     registration_date = Field()
     status = Field()
     id_code_reestri_db = Field()
+    no_docs = Field()
 
 # A downloadable document
 class Document(Item):

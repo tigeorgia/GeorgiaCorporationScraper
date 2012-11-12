@@ -1,12 +1,41 @@
 from scrapy.contrib.exporter import JsonLinesItemExporter
 from scrapy import signals
+from scrapy.exceptions import DropItem
 import registry.items
 import codecs
+
+from items import Corporation
 
 # Define your item pipelines here
 #
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: http://doc.scrapy.org/topics/item-pipeline.html
+
+class DropBlankCorporationsPipeline(object):
+    def __init__(self, stats):
+        self.stats = stats
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(crawler.stats)
+
+    def process_item(self, item, spider):
+        no_info = True
+        no_docs = True
+        if isinstance(item, Corporation):
+            if (item['id_code_legal'] or item['personal_code'] or item['state_reg_code'] or item['name'] or item['registration_date']):
+                no_info = False
+            no_docs = item['no_docs']
+        
+            if no_info:
+                self.stats.inc_value('spider/corporation/no_info')
+            if no_docs:
+                self.stats.inc_value('spider/corporation/no_docs')
+            if no_docs and no_info:
+                self.stats.inc_value('spider/corporation/blank')
+                raise DropItem("Corporation id {} appears to be blank.".format(item.id_code_reestri_db))
+        
+        return item
 
 # Exports to multiple JsonLines files, one file per Item
 # in items.py

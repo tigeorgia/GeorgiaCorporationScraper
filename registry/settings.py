@@ -16,7 +16,8 @@ NEWSPIDER_MODULE = 'registry.spiders'
 AUTOTHROTTLE_ENABLED = True
 
 ITEM_PIPELINES = [
-    'registry.pipelines.MultiFileJsonLinesPipeline'
+    'registry.pipelines.MultiFileJsonLinesPipeline',
+    'registry.pipelines.DropBlankCorporationsPipeline',
 ]
 
 #DOWNLOAD_DELAY = 0.5

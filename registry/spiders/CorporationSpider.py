@@ -176,11 +176,6 @@ class CorporationSpider(BaseSpider):
         return results
     
     # Here we finally get to actually scrape something
-    # This function will either:
-    # 1) Spawn new copies of itself by incrementing the database id
-    #    it was called with by response.meta['increment'] --OR--
-    # 2) Crawl only the corporation it was passed, if 
-    #    response.meta['increment'] is missing.
     def parse_corpdetails(self, response):
         def get_table_row(soup, header):
             res = soup.find("td",text=header)
@@ -208,8 +203,9 @@ class CorporationSpider(BaseSpider):
         corp['status'] = soup.find("td", text=u"სტატუსი").find_next_sibling("td").div.string
         if (corp['status'] is not None):
             corp['status'] = corp['status'].strip()
-
-        results.append(corp)
+        
+        corp['no_docs'] = True
+        #results.append(corp)
         
         # Return 1 person if necessary (personal corp)
         if ((corp['classification'] == u"ინდივიდუალური მეწარმე") and (corp['personal_code'] is not None)):
@@ -225,6 +221,7 @@ class CorporationSpider(BaseSpider):
 
         # Return requests for statement pages
         if stmnt_caption is not None:
+            corp['no_docs'] = False
             stmnt_table = stmnt_caption.parent
             for row in stmnt_table.tbody.find_all("tr"):
                 link = row.find_all("img", src="https://enreg.reestri.gov.ge/images/blob.png")[0].parent
@@ -235,6 +232,7 @@ class CorporationSpider(BaseSpider):
                                  meta={'cookiejar':response.meta['cookiejar']}))
 
         if scand_caption is not None:
+            corp['no_docs'] = False
             scand_table = scand_caption.parent
             for row in scand_table.tbody.find_all("tr"):
                 link_node = row.find_all("img", src="https://enreg.reestri.gov.ge/images/blob.png")[0].parent
@@ -255,28 +253,8 @@ class CorporationSpider(BaseSpider):
                     results.append(Request(url=doc_url,
                                     callback=self.parse_scannedpdf,
                                     meta={'cookiejar':response.meta['cookiejar']}))
-        # Return a request to the next corporation to be scraped
-        # if was passed an increment meta key
-#        if 'increment' in response.meta:
-#            dbid_old = int(response.meta['id_code_reestri_db'])
-#            dbid_new = dbid_old + int(response.meta['increment'])
-#            corp_url = self.base_url+"?c=app&m=show_legal_person&legal_code_id={}".format(dbid_new)
-#            request = response.request.replace(url=corp_url)
-#            request.meta['id_code_reestri_db'] = dbid_new
-#            request.meta['cookiejar'] = response.meta['cookiejar']
-#            request.meta['increment'] = response.meta['increment']
-#           
-#            # Check if we scraped a blank table
-#            if corp['id_code_legal'] is None and corp['personal_code'] is None and corp['state_reg_code'] is None and corp['name'] is None and corp['classification'] is None and corp['registration_date'] is None:
-#                request.meta['misses'] = int(response.meta['misses'])+1
-#                log.msg("Consecutive misses: {}".format(request.meta['misses']))
-#            else:
-#                request.meta['misses'] = 0
-#            
-#            # If there have been more than the maximum consecutive
-#            # misses, don't continue.
-#            if int(request.meta['misses']) < self.MAX_CONSEC_MISSES:
-#                results.append(request)
+        
+        results.append(corp)
 
         return results
 
