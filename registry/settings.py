@@ -8,6 +8,7 @@
 
 #COOKIES_DEBUG = True
 BOT_NAME = 'registry'
+LOG_LEVEL = 'INFO'
 
 RETRY_TIMES = 9
 
