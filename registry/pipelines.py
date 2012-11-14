@@ -1,8 +1,11 @@
 from scrapy.contrib.exporter import JsonLinesItemExporter
 from scrapy import signals
-from scrapy.exceptions import DropItem
+from scrapy.exceptions import DropItem, CloseSpider
+from scrapy.item import Item
+import scrapy.log as log
 import registry.items
 import codecs
+import collections
 
 from items import Corporation
 
@@ -10,6 +13,31 @@ from items import Corporation
 #
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: http://doc.scrapy.org/topics/item-pipeline.html
+
+# A lot of the fields in the database have tons of leading
+# and trailing whitespace. This will remove them.
+# This is not guaranteed to work on absolutely every object
+# you could possibly pass into it. But it should work on a lot.
+class RemoveWhitespacePipeline(object):
+    def process_item(self, item, spider):
+        return self.deep_strip(item)
+
+    def deep_strip(self, item):
+        # If it's a string, just strip it.
+        if isinstance(item, (str,unicode)):
+            return item.strip()
+        # If it's a scrapy Item or a dict, strip the values in the dict
+        elif isinstance(item, Item) or isinstance(item,collections.MutableMapping):
+            for key in item:
+                item[key] = self.deep_strip(item[key])
+            return item
+        # If it's any other iterable, assume it's an array, strip each entry
+        elif isinstance(item,collections.Iterable): 
+            return [self.deep_strip(i) for i in item]
+        # If it's something else, like a number, just return it.
+        else:
+            return item
+
 
 class DropBlankCorporationsPipeline(object):
     def __init__(self, stats):
