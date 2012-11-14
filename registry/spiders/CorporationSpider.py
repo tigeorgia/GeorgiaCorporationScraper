@@ -2,6 +2,7 @@
 
 import re
 import math
+import urlparse
 
 from scrapy.spider import BaseSpider
 from scrapy.http import Request, FormRequest
@@ -9,8 +10,7 @@ from scrapy.selector import HtmlXPathSelector
 from scrapy import log
 from bs4 import BeautifulSoup
 
-from registry.items import Corporation, Person, CorporationDocument
-
+from registry.items import Corporation, Person, CorporationDocument, StatementDocument, RegistryStatement, PersonCorpRelation
 class CorporationSpider(BaseSpider):
     name = "corps"
     page_by_page = True # Scrape page-by-page -- VERY slow (~19+ days)
@@ -216,8 +216,8 @@ class CorporationSpider(BaseSpider):
             results.append(pers)
         
         # Return Requests / Items for statements and scanned documents.
-        stmnt_caption = soup.find("caption", text="განცხადებები")
-        scand_caption = soup.find("caption", text="სკანირებული დოკუმენტები")
+        stmnt_caption = soup.find("caption", text=u"განცხადებები")
+        scand_caption = soup.find("caption", text=u"სკანირებული დოკუმენტები")
 
         # Return requests for statement pages
         if stmnt_caption is not None:
@@ -229,7 +229,9 @@ class CorporationSpider(BaseSpider):
                 my_url = self.base_url+"?c=app&m=show_app&app_id={}".format(stmnt_dbid)
                 results.append(Request(url=my_url, 
                                  callback=self.parse_statement,
-                                 meta={'cookiejar':response.meta['cookiejar']}))
+                                 meta={'cookiejar':response.meta['cookiejar'],
+                                       'id_code_reestri_db':response.meta['id_code_reestri_db'],
+                                       'stmnt_id_reestri_db':stmnt_dbid}))
 
         if scand_caption is not None:
             corp['no_docs'] = False
@@ -242,7 +244,7 @@ class CorporationSpider(BaseSpider):
                 # But there's an empty <strong> tag there so we
                 # can't use BeautifulSoup's convenience .string attribute
                 #log.msg("Link node next element {}".format(link_node.parent.next_element))
-                fname = link_node.parent.find_next_sibling("td").contents[0]
+                fname = link_node.parent.find_next_sibling("td").find("a").string
 
                 # Create a CorporationDocument
                 doc = CorporationDocument(fk_corp_id_code_reestri_db=corp['id_code_reestri_db'],filename=fname,link=doc_url)
@@ -251,18 +253,212 @@ class CorporationSpider(BaseSpider):
                 # Create a request if we might be able to parse it (pdf only)
                 if fname[-3:] == "pdf":
                     results.append(Request(url=doc_url,
-                                    callback=self.parse_scannedpdf,
+                                    callback=self.parse_corp_pdf,
                                     meta={'cookiejar':response.meta['cookiejar']}))
         
         results.append(corp)
 
         return results
 
+    # Parse a corporation statement page.
+    # This has lots of details about the corporation and links to
+    # other stuff.
     def parse_statement(self, response):
+        from scrapy.shell import inspect_response
+
+        results = []
+        app_id_code_reestri_db = urlparse.parse_qs(urlparse.urlparse(response.request.url)[4])['app_id'][0]
+
+        soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
+        
+        # First table: "Prepared documents" -- scrape details into CorpDoc item
+        # and then grab the doc too; they are usually PDFs.
+        prepared_table = soup.find("caption", text=u"მომზადებული დოკუმენტები")
+        if prepared_table is not None:
+            prepared_table = prepared_table.parent
+            for row in prepared_table.find_all("tr"):
+                # First cell contains link
+                # Second contains title, date
+                # Third is blank
+                cells = row.find_all("td")
+                link = cells[0].a["href"]
+                spans = cells[1].find_all("span")
+                title = spans[0].string
+                date = spans[1].string
+
+                results.append(StatementDocument(
+                    fk_corp_id_code_reestri_db=response.meta['id_code_reestri_db'],
+                    fk_stmnt_id_code_reestri_db=app_id_code_reestri_db,
+                    link=link,
+                    title=title,
+                    date=date))
+                
+                results.append(Request(url=link,
+                            callback=self.parse_app_prepared_pdf,
+                            meta={'cookiejar':response.meta['cookiejar'],
+                                  'id_code_reestri_db':response.meta['id_code_reestri_db']}))
+        
+        # Second table: Status Documents. Scrape details into CorpDocs, and
+        # grab the docs too, they are usually PDFs.
+        status_table = soup.find("caption", text=u"სტატუსი / გადაწყვეტილება")
+        if status_table is not None:
+            status_table = status_table.parent
+
+            for row in status_table.find_all("tr"):
+                cells = row.find_all("td")
+                link = cells[0].a["href"]
+                registration_num = cells[1].find(class_="maintxt").string
+                date = cells[1].find(class_="smalltxt").string
+                title = cells[2].find(style=True).string
+
+                results.append(StatementDocument(
+                    fk_corp_id_code_reestri_db=response.meta['id_code_reestri_db'],
+                    fk_stmnt_id_code_reestri_db=app_id_code_reestri_db,
+                    link=link,
+                    title=title,
+                    date=date,
+                    registration_num=registration_num))
+        
+                results.append(Request(url=link,
+                            callback=self.parse_app_status_pdf,
+                            meta={'cookiejar':response.meta['cookiejar'],
+                                  'id_code_reestri_db':response.meta['id_code_reestri_db']}))
+        # Third table: Scanned Documents. Scrape details into CorpDocs, and
+        # grab the docs if they are PDFs.
+        scanned_table = soup.find("caption", text=u"სკანირებული დოკუმენტები")
+        if scanned_table is not None:
+            scanned_table = scanned_table.parent
+
+            for row in scanned_table.find_all("tr"):
+                cells = row.find_all("td")
+                link = cells[0].a["href"]
+                doc_info = cells[1].find_all(class_="maintxt")
+                if (len(doc_info) == 2):
+                    title = doc_info[0].string
+                    date = doc_info[1].string
+                else:
+                    date = doc_info[0].string
+                    title = None
+                filename = cells[2].find("a").find("span").string
+
+                doc = StatementDocument(
+                    fk_corp_id_code_reestri_db=response.meta['id_code_reestri_db'],
+                    fk_stmnt_id_code_reestri_db=app_id_code_reestri_db,
+                    link=link,
+                    date=date,
+                    filename=filename)
+                if (title):
+                    doc['title'] = title
+                
+                results.append(doc)
+        
+                #TODO: Check whether it's a PDF and if so, return
+                # a Request to the document.
+
+        # Fourth table: Statement details. Scrape details into RegistryStatement.
+        statement = RegistryStatement()
+        # First block of info, starting with statement number.
+        regx = re.compile(u"^\s+განცხადება.+$")
+        caption = soup.find("caption",text=regx)
+        if caption is None:
+            inspect_response(response)
+        statement['statement_num'] = caption.string.split('#')[1]
+        table = caption.parent
+
+        statement['registration_num'] = self.get_header_sib(table,u"\n\s*რეგისტრაციის ნომერი\s*").span.string
+        statement['statement_type'] = self.get_header_sib(table,u"\n\s*მომსახურების სახე\s*").span.string
+        statement['service_cost'] = self.get_header_sib(table,u"\n\s*მომსახურების ღირებულება\s*").span.string
+        pay_debt = self.get_header_sib(table,u"\n\s*გადასახდელი თანხა/ბალანსი\s*").span.string
+        statement['payment'] = pay_debt.split("/")[0]
+        statement['outstanding'] = pay_debt.split("/")[1]
+        statement['id_reestri_db'] = response.meta['stmnt_id_reestri_db']
+
+        # Second block of info, starting after payment details.
+        # Find the correct table
+        table = soup.find("div", id="application_tab").table
+        # Grab the relevant parts
+        statement['id_code_legal'] = self.get_header_sib(table,u"საიდენტიფიკაციო ნომერი").strong.string
+        statement['name'] = self.get_header_sib(table,u"სუბიექტის დასახელება ").string
+        statement['classification'] = self.get_header_sib(table,u"სამართლებრივი ფორმა").string
+        statement['reorganization_type'] = self.get_header_sib(table,u"რეორგანიზაციის ტიპი ").string
+        statement['quantity'] = self.get_header_sib(table,u"რაოდენობა").string
+        statement['changed_info'] = self.get_header_sib(table,u"შესაცვლელი რეკვიზიტი: ").string
+        
+        # Attached docs description is a <ul>
+        attached = self.get_header_sib(table, u"\n\s*თანდართული დოკუმენტაცია\s")
+        attached_desc = []
+        for li in attached.ul.contents:
+            attached_desc.append(li.string)
+        statement['attached_docs_desc'] = attached_desc
+
+        # Additional docs is a <div>, don't know what the format looks like yet
+        addtl_td = self.get_header_sib(table,u"\n\s*დამატებით წარმოდგენილი\s*")
+        statement['additional_docs'] = addtl_td.find(id="additional_docs_container").string
+        
+        # Issued docs also a ul
+        issued = self.get_header_sib(table, u"\n\s*გასაცემი დოკუმენტები\s*").ul
+        issued_desc = []
+        for li in issued.contents:
+            issued_desc.append(li.string)
+        statement['issued_docs'] = issued_desc
+        
+        # Don't know the format of notes yet either.
+        notes_td = self.get_header_sib(table, u"\n\s*შენიშვნა\s*")
+        statement['notes'] = notes_td.string
+        results.append(statement)
+
+        # Cells containing people require a bit more intelligence
+        representative_td = self.get_header_sib(table,u" წარმომადგენელი  ")
+        rv_pers = self.person_from_statement_cell(representative_td)
+        if len(rv_pers) > 0:
+            results.append(PersonCorpRelation(person=rv_pers,
+                        relation_type = u"წარმომადგენელი",
+                        cite_type = "statement",
+                        cite_link = response.request.url))
+
+        representee_td = self.get_header_sib(table,u" წარმომდგენი  ")
+        re_pers = self.person_from_statement_cell(representee_td)
+        if len(re_pers) > 0:
+            results.append(PersonCorpRelation(person=re_pers,
+                        relation_type = u"წარმომდგენი",
+                        cite_type = "statement",
+                        cite_link = response.request.url))
+
+        ganmcxadebeli_td = self.get_header_sib(table,u"განმცხადებელი  ")
+        g_pers = self.person_from_statement_cell(ganmcxadebeli_td)
+        if len(g_pers) > 0:
+            results.append(PersonCorpRelation(person=g_pers,
+                        relation_type = u"განმცხადებელი",
+                        cite_type = "statement",
+                        cite_link = response.request.url))
+        return results
+
+    def person_from_statement_cell(self, cell):
+        pers = Person()
+        for s in cell.stripped_strings:
+            parts = s.split(u"(პ/ნ:")
+            if len(parts) == 2:
+                pers['name'] = parts[0]
+                pers['personal_code'] = parts[1][:-1]
+            else:
+                pers['address'] = s
+        return pers
+
+    def parse_corp_pdf(self, response):
         pass
 
-    def parse_scannedpdf(self, response):
+    def parse_app_prepared_pdf(self, response):
         pass
+    
+    def parse_app_status_pdf(self, response):
+        pass
+
+    def get_header_sib(self, soup, header):
+        regx = re.compile(header)
+        res = soup.find("td",text=regx)
+        if res is not None:
+            next_col = res.find_next_sibling("td")
+            return next_col
 
     def parse(self, response):
         pass
