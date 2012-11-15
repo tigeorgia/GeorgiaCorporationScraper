@@ -10,7 +10,8 @@ Should be pretty simple:
 2. `cd geo_corp_scrape`
 3. `source bin/activate` and clone the repo
 4. cd into the repo folder and `pip install -r requirements.txt`
-5. Install [poppler](http://poppler.freedesktop.org/)
+5. `cp settings.py.example settings.py` and edit to suit.
+6. Install [poppler](http://poppler.freedesktop.org/)
 
 Usage
 ===========
