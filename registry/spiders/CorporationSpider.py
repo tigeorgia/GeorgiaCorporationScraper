@@ -11,6 +11,7 @@ from scrapy import log
 from bs4 import BeautifulSoup
 
 from registry.items import Corporation, Person, CorporationDocument, StatementDocument, RegistryStatement, PersonCorpRelation
+
 class CorporationSpider(BaseSpider):
     name = "corps"
     page_by_page = True # Scrape page-by-page -- VERY slow (~19+ days)
@@ -294,7 +295,7 @@ class CorporationSpider(BaseSpider):
                     date=date))
                 
                 results.append(Request(url=link,
-                            callback=self.parse_app_prepared_pdf,
+                            callback=self.parse_stmnt_prepared_pdf,
                             meta={'cookiejar':response.meta['cookiejar'],
                                   'id_code_reestri_db':response.meta['id_code_reestri_db']}))
         
@@ -320,7 +321,7 @@ class CorporationSpider(BaseSpider):
                     registration_num=registration_num))
         
                 results.append(Request(url=link,
-                            callback=self.parse_app_status_pdf,
+                            callback=self.parse_stmnt_status_pdf,
                             meta={'cookiejar':response.meta['cookiejar'],
                                   'id_code_reestri_db':response.meta['id_code_reestri_db']}))
         # Third table: Scanned Documents. Scrape details into CorpDocs, and
@@ -447,12 +448,21 @@ class CorporationSpider(BaseSpider):
     def parse_corp_pdf(self, response):
         pass
 
-    def parse_app_prepared_pdf(self, response):
-        pass
-    
-    def parse_app_status_pdf(self, response):
+    # Each statement may have an output document which is "prepared"
+    # for that statement. This function scrapes those documents
+    def parse_stmnt_prepared_pdf(self, response):
+        #log.msg(response.body, level=log.INFO)
         pass
 
+    # Each statement also has status PDFs which come along with it
+    # This function extracts information from those PDFs.
+    def parse_stmnt_status_pdf(self, response):
+        pass
+
+    # There are a lot of tables where the header
+    # is in column 0, and the info we want is in column 1.
+    # So this just searches for a td matching the header
+    # string and then returns its next sibling.
     def get_header_sib(self, soup, header):
         regx = re.compile(header)
         res = soup.find("td",text=regx)
