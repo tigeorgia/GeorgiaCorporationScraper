@@ -1,6 +1,24 @@
 import uuid, os
-
+import codecs
+from scrapy.exceptions import IgnoreRequest
+from scrapy.http import TextResponse
 from registry.settings import PDFTOHTML_TEMP_DIR as tmp
+class DropDjvuMiddleware(object):
+    
+    def __init__(self, stats):
+        self.stats = stats
+            
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(crawler.stats)
+    
+    def process_response(self, request, response, spider):
+        if response.headers['Content-Type'] != 'image/vnd.djvu':
+            return response
+        else:
+            self.stats.inc_value('djvu-extracts')
+            raise IgnoreRequest
+
 # Custom middleware that downloads a PDF file, converts
 # it to HTML / XML using either Python or an external
 # program, and then provides the result as if it were a
@@ -10,7 +28,7 @@ class PdfToHtmlMiddleware(object):
     def process_response(self, request, response, spider):
         # Relies on the server setting the content-type header 
         # correctly.
-        if response.headers['content-type'] != "application/pdf":
+        if response.headers['Content-Type'] != "application/pdf":
             return response
         
         # If it's a PDF
@@ -33,7 +51,7 @@ class PdfToHtmlMiddleware(object):
             # -enc: Encoding
             os.system('pdftohtml -q -xml -s -i -enc UTF-8 {} {}'.format(tmp+'/'+fname+'.pdf',tmp+'/'+fname))
             # Read output
-            with open(tmp+'/'+fname+'.xml', 'rb') as fin:
+            with codecs.open(tmp+'/'+fname+'.xml', 'rb',encoding="utf-8") as fin:
                 new_body = fin.read()
             
             # Clean up after ourselves
@@ -41,4 +59,6 @@ class PdfToHtmlMiddleware(object):
             os.remove(tmp+'/'+fname+'.xml')
 
             # Construct new response
-            return response.replace(body=new_body)
+            return TextResponse(url=response.url, encoding="utf-8",
+                        status=response.status, headers=response.headers,
+                        body=new_body, flags=response.flags)
