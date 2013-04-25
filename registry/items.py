@@ -21,7 +21,7 @@ class Document(Item):
 # A downloadable document associated
 # with a particular corporation.
 class CorporationDocument(Document):
-    fk_corp_id_code_reestri_db = Field()
+    fk_corp_id_code = Field()
     registration_num = Field()
 
 # Downloadable document associated with a corporation and a registry
@@ -52,15 +52,23 @@ class RegistryStatement(Item):
     issued_docs = Field()
     notes = Field()
 
+class RegistryExtract(Item):
+    fk_corp_id_code = Field()
+    date = Field()
+    corp_address = Field()
+    corp_email = Field()
+
 class Person(Item):
     name = Field()
     personal_code = Field()
     address = Field()
     dob = Field()
+    nationality = Field()
 
 # Represents a direct relationship between a person and a corporation
 class PersonCorpRelation(Item):
     person = Field()
+    fk_corp_id_code = Field()
     relation_type = Field()
     cite_type = Field()
     cite_link = Field()

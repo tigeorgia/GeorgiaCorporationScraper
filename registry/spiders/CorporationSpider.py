@@ -10,7 +10,8 @@ from scrapy.selector import HtmlXPathSelector
 from scrapy import log
 from bs4 import BeautifulSoup
 
-from registry.items import Corporation, Person, CorporationDocument, StatementDocument, RegistryStatement, PersonCorpRelation
+from registry.items import Corporation, Person, CorporationDocument, StatementDocument, RegistryStatement, PersonCorpRelation, RegistryExtract
+from registry import pdfparse
 
 class CorporationSpider(BaseSpider):
     name = "corps"
@@ -34,7 +35,7 @@ class CorporationSpider(BaseSpider):
     # form dropdown menu.
     def parse_corpclasses(self, response):
         #log.msg("in parse_corpclasses")
-        soup = BeautifulSoup(response.body, "html5lib")
+        soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
         form = soup.find(id="s_search_persons_form")
         if self.page_by_page == True:
             for opt in form.find_all("option"):
@@ -162,9 +163,9 @@ class CorporationSpider(BaseSpider):
         buttons = soup.find_all("img",src="https://enreg.reestri.gov.ge/images/info.png")
         results = []
         for b in buttons:
-            dbid = b.parent['onclick'].split("(")[-1].rstrip(")")
+            dbid = b.parent['onclick'].split(u"(")[-1].rstrip(u")")
             #log.msg("Found dbid: {}".format(dbid))
-            corp_url = self.base_url+"?c=app&m=show_legal_person&legal_code_id={}".format(dbid)
+            corp_url = self.base_url+u"?c=app&m=show_legal_person&legal_code_id={}".format(dbid)
             request = Request(url=corp_url,callback=self.parse_corpdetails)
             request.meta['id_code_reestri_db'] = dbid
             request.meta['cookiejar'] = response.meta['cookiejar']
@@ -226,12 +227,12 @@ class CorporationSpider(BaseSpider):
             stmnt_table = stmnt_caption.parent
             for row in stmnt_table.tbody.find_all("tr"):
                 link = row.find_all("img", src="https://enreg.reestri.gov.ge/images/blob.png")[0].parent
-                stmnt_dbid = link['onclick'].split("(")[-1].rstrip(")")
-                my_url = self.base_url+"?c=app&m=show_app&app_id={}".format(stmnt_dbid)
+                stmnt_dbid = link['onclick'].split(u"(")[-1].rstrip(u")")
+                my_url = self.base_url+u"?c=app&m=show_app&app_id={}".format(stmnt_dbid)
                 results.append(Request(url=my_url, 
                                  callback=self.parse_statement,
                                  meta={'cookiejar':response.meta['cookiejar'],
-                                       'id_code_reestri_db':response.meta['id_code_reestri_db'],
+                                       'corp_id_code':corp['id_code_legal'],
                                        'stmnt_id_reestri_db':stmnt_dbid}))
 
         if scand_caption is not None:
@@ -248,7 +249,7 @@ class CorporationSpider(BaseSpider):
                 fname = link_node.parent.find_next_sibling("td").find("a").string
 
                 # Create a CorporationDocument
-                doc = CorporationDocument(fk_corp_id_code_reestri_db=corp['id_code_reestri_db'],filename=fname,link=doc_url)
+                doc = CorporationDocument(fk_corp_id_code=corp['id_code_legal'],filename=fname,link=doc_url)
                 results.append(doc)
 
                 # Create a request if we might be able to parse it (pdf only)
@@ -288,16 +289,16 @@ class CorporationSpider(BaseSpider):
                 date = spans[1].string
 
                 results.append(StatementDocument(
-                    fk_corp_id_code_reestri_db=response.meta['id_code_reestri_db'],
+                    fk_corp_id_code=response.meta['corp_id_code'],
                     fk_stmnt_id_code_reestri_db=app_id_code_reestri_db,
                     link=link,
                     title=title,
                     date=date))
                 
                 results.append(Request(url=link,
-                            callback=self.parse_stmnt_prepared_pdf,
+                            callback=self.parse_stmnt_prepared_doc,
                             meta={'cookiejar':response.meta['cookiejar'],
-                                  'id_code_reestri_db':response.meta['id_code_reestri_db']}))
+                                  'corp_id_code':response.meta['corp_id_code']}))
         
         # Second table: Status Documents. Scrape details into CorpDocs, and
         # grab the docs too, they are usually PDFs.
@@ -313,17 +314,18 @@ class CorporationSpider(BaseSpider):
                 title = cells[2].find(style=True).string
 
                 results.append(StatementDocument(
-                    fk_corp_id_code_reestri_db=response.meta['id_code_reestri_db'],
+                    fk_corp_id_code=response.meta['corp_id_code'],
                     fk_stmnt_id_code_reestri_db=app_id_code_reestri_db,
                     link=link,
                     title=title,
                     date=date,
                     registration_num=registration_num))
         
-                results.append(Request(url=link,
-                            callback=self.parse_stmnt_status_pdf,
-                            meta={'cookiejar':response.meta['cookiejar'],
-                                  'id_code_reestri_db':response.meta['id_code_reestri_db']}))
+                # Probably don't actually need to parse these.
+                #results.append(Request(url=link,
+                #            callback=self.parse_stmnt_status_pdf,
+                #            meta={'cookiejar':response.meta['cookiejar'],
+                #                  'id_code_reestri_db':response.meta['id_code_reestri_db']}))
         # Third table: Scanned Documents. Scrape details into CorpDocs, and
         # grab the docs if they are PDFs.
         scanned_table = soup.find("caption", text=u"სკანირებული დოკუმენტები")
@@ -343,7 +345,7 @@ class CorporationSpider(BaseSpider):
                 filename = cells[2].find("a").find("span").string
 
                 doc = StatementDocument(
-                    fk_corp_id_code_reestri_db=response.meta['id_code_reestri_db'],
+                    fk_corp_id_code=response.meta['corp_id_code'],
                     fk_stmnt_id_code_reestri_db=app_id_code_reestri_db,
                     link=link,
                     date=date,
@@ -366,10 +368,10 @@ class CorporationSpider(BaseSpider):
         statement['statement_num'] = caption.string.split('#')[1]
         table = caption.parent
 
-        statement['registration_num'] = self.get_header_sib(table,u"\n\s*რეგისტრაციის ნომერი\s*").span.string
-        statement['statement_type'] = self.get_header_sib(table,u"\n\s*მომსახურების სახე\s*").span.string
-        statement['service_cost'] = self.get_header_sib(table,u"\n\s*მომსახურების ღირებულება\s*").span.string
-        pay_debt = self.get_header_sib(table,u"\n\s*გადასახდელი თანხა/ბალანსი\s*").span.string
+        statement['registration_num'] = self._get_header_sib(table,u"\n\s*რეგისტრაციის ნომერი\s*").span.string
+        statement['statement_type'] = self._get_header_sib(table,u"\n\s*მომსახურების სახე\s*").span.string
+        statement['service_cost'] = self._get_header_sib(table,u"\n\s*მომსახურების ღირებულება\s*").span.string
+        pay_debt = self._get_header_sib(table,u"\n\s*გადასახდელი თანხა/ბალანსი\s*").span.string
         statement['payment'] = pay_debt.split("/")[0]
         statement['outstanding'] = pay_debt.split("/")[1]
         statement['id_reestri_db'] = response.meta['stmnt_id_reestri_db']
@@ -378,63 +380,212 @@ class CorporationSpider(BaseSpider):
         # Find the correct table
         table = soup.find("div", id="application_tab").table
         # Grab the relevant parts
-        statement['id_code_legal'] = self.get_header_sib(table,u"საიდენტიფიკაციო ნომერი").strong.string
-        statement['name'] = self.get_header_sib(table,u"სუბიექტის დასახელება ").string
-        statement['classification'] = self.get_header_sib(table,u"სამართლებრივი ფორმა").string
-        statement['reorganization_type'] = self.get_header_sib(table,u"რეორგანიზაციის ტიპი ").string
-        statement['quantity'] = self.get_header_sib(table,u"რაოდენობა").string
-        statement['changed_info'] = self.get_header_sib(table,u"შესაცვლელი რეკვიზიტი: ").string
+        statement['id_code_legal'] = self._get_header_sib(table,u"საიდენტიფიკაციო ნომერი").strong.string
+        statement['name'] = self._get_header_sib(table,u"სუბიექტის დასახელება ").string
+        statement['classification'] = self._get_header_sib(table,u"სამართლებრივი ფორმა").string
+        statement['reorganization_type'] = self._get_header_sib(table,u"რეორგანიზაციის ტიპი ").string
+        statement['quantity'] = self._get_header_sib(table,u"რაოდენობა").string
+        statement['changed_info'] = self._get_header_sib(table,u"შესაცვლელი რეკვიზიტი: ").string
         
         # Attached docs description is a <ul>
-        attached = self.get_header_sib(table, u"\n\s*თანდართული დოკუმენტაცია\s")
+        attached = self._get_header_sib(table, u"\n\s*თანდართული დოკუმენტაცია\s")
         attached_desc = []
         for li in attached.ul.contents:
             attached_desc.append(li.string)
         statement['attached_docs_desc'] = attached_desc
 
         # Additional docs is a <div>, don't know what the format looks like yet
-        addtl_td = self.get_header_sib(table,u"\n\s*დამატებით წარმოდგენილი\s*")
+        addtl_td = self._get_header_sib(table,u"\n\s*დამატებით წარმოდგენილი\s*")
         statement['additional_docs'] = addtl_td.find(id="additional_docs_container").string
         
         # Issued docs also a ul
-        issued = self.get_header_sib(table, u"\n\s*გასაცემი დოკუმენტები\s*").ul
+        issued = self._get_header_sib(table, u"\n\s*გასაცემი დოკუმენტები\s*").ul
         issued_desc = []
         for li in issued.contents:
             issued_desc.append(li.string)
         statement['issued_docs'] = issued_desc
         
         # Don't know the format of notes yet either.
-        notes_td = self.get_header_sib(table, u"\n\s*შენიშვნა\s*")
+        notes_td = self._get_header_sib(table, u"\n\s*შენიშვნა\s*")
         statement['notes'] = notes_td.string
         results.append(statement)
 
         # Cells containing people require a bit more intelligence
-        representative_td = self.get_header_sib(table,u" წარმომადგენელი  ")
-        rv_pers = self.person_from_statement_cell(representative_td)
+        representative_td = self._get_header_sib(table,u" წარმომადგენელი  ")
+        rv_pers = self._person_from_statement_cell(representative_td)
         if len(rv_pers) > 0:
             results.append(PersonCorpRelation(person=rv_pers,
-                        relation_type = u"წარმომადგენელი",
+                        fk_corp_id_code = response.meta['corp_id_code'],
+                        relation_type = [u"წარმომადგენელი"],
                         cite_type = "statement",
                         cite_link = response.request.url))
 
-        representee_td = self.get_header_sib(table,u" წარმომდგენი  ")
-        re_pers = self.person_from_statement_cell(representee_td)
+        representee_td = self._get_header_sib(table,u" წარმომდგენი  ")
+        re_pers = self._person_from_statement_cell(representee_td)
         if len(re_pers) > 0:
             results.append(PersonCorpRelation(person=re_pers,
-                        relation_type = u"წარმომდგენი",
+                        fk_corp_id_code = response.meta['corp_id_code'],
+                        relation_type = [u"წარმომდგენი"],
                         cite_type = "statement",
                         cite_link = response.request.url))
 
-        ganmcxadebeli_td = self.get_header_sib(table,u"განმცხადებელი  ")
-        g_pers = self.person_from_statement_cell(ganmcxadebeli_td)
+        ganmcxadebeli_td = self._get_header_sib(table,u"განმცხადებელი  ")
+        g_pers = self._person_from_statement_cell(ganmcxadebeli_td)
         if len(g_pers) > 0:
             results.append(PersonCorpRelation(person=g_pers,
-                        relation_type = u"განმცხადებელი",
+                        fk_corp_id_code = response.meta['corp_id_code'],
+                        relation_type = [u"განმცხადებელი"],
                         cite_type = "statement",
                         cite_link = response.request.url))
         return results
 
-    def person_from_statement_cell(self, cell):
+    def parse_corp_pdf(self, response):
+        pass
+
+    # Each statement may have an output document which is "prepared"
+    # for that statement. This function scrapes those documents
+    def parse_stmnt_prepared_doc(self, response):
+        from scrapy.shell import inspect_response
+        headers = {
+            "extract_date": u"ამონაწერის მომზადების თარიღი:",
+            "subject": u"სუბიექტი",
+            "name": u"საფირმო სახელწოდება:",
+            "address": u"იურიდიული მისამართი:",
+            "email": u"ელექტრონული ფოსტა:",
+            "legal_id_code": u"საიდენტიფიკაციო კოდი:",
+            "legal_form": u"სამართლებრივი ფორმა:",
+            "reg_date": u"სახელმწიფო რეგისტრაციის თარიღი:",
+            "reg_agency": u"მარეგისტრირებელი ორგანო:",
+            "tax_agency": u"საგადასახადო ინსპექცია:",
+            "direct": u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",
+            "owners": u"პარტნიორები",
+            "lien": u"ყადაღა/აკრძალვა:",
+        }
+        # These documents are PDFs, so they're going to be coming
+        # from the PdfToHtml Middleware, which means they'll
+        # be XML rather than HTML.
+        log.msg("Parsing PDF {}".format(response.url), level=log.DEBUG)
+       
+        results = []
+        soup = BeautifulSoup(response.body, "xml", from_encoding="utf-8")
+        boxes = []
+        for t in soup.find_all("text"):
+            # Put everything on one "page". Each <page> apparently has height
+            # of about 1200, so offset by 1200*page_num.
+            t['top'] = unicode(int(t['top'])+1200*(int(t.parent['number'])-1))
+            boxes.append(pdfparse.TextBox(t))
+        
+        boxes = pdfparse.remove_duplicates(boxes) # Handily, this sorts too
+        # TextBoxes define sort order as top-to-bottom, left-to-right.
+       
+        address_h = soup.find("text", text=headers['address'])
+        email_h = soup.find("text", text=headers['email'])
+        directors_h = soup.find("text", text=headers['direct'])
+        owners_h = soup.find("text", text=headers['owners'])
+        extract_date_h = soup.find("text",text=headers['extract_date'])
+        # TODO: Check for malformed / Blank / Something else extracts
+        extract = RegistryExtract()
+        extract['fk_corp_id_code'] = response.meta['corp_id_code']
+
+        # Get extract date.
+        if extract_date_h is not None:
+            date_lines = pdfparse.find_to_next_header(pdfparse.TextBox(extract_date_h),headers,boxes)
+            extract['date'] = u"".join([tb.text for tb in date_lines])
+
+        # Get mailing address
+        if address_h is not None:
+            log.msg("Found address, printing: ", level=log.DEBUG)
+            addr_lines = pdfparse.find_to_next_header(pdfparse.TextBox(address_h),headers,boxes)
+            s = u"".join([tb.text for tb in addr_lines])
+            # TODO: Metrics to check whether we've mis-parsed.
+            extract['corp_address'] = s
+            log.msg(unicode(s),level=log.DEBUG)
+        else:
+            log.msg("No address found.", level=log.DEBUG)
+
+        # Get email address
+        if email_h is not None:
+            log.msg("Found email, printing: ", level=log.DEBUG)
+            email_lines = pdfparse.find_to_next_header(pdfparse.TextBox(email_h),headers,boxes)
+            s = u"".join([tb.text for tb in email_lines])
+            log.msg(unicode(s), level=log.DEBUG)
+            # TODO: Validate email address to check for mis-parse
+            extract['corp_email'] = s
+        else:
+            log.msg("No email found.", level=log.DEBUG)
+        
+        results.append(extract)
+
+
+        # Parse directors
+        # TODO: Lots of extra processing to reliably extract names,
+        # ID numbers, ethnicity, and role.
+        if(directors_h is not None):
+            log.msg("Found directors block, printing", level=log.DEBUG)
+            dir_lines = pdfparse.find_to_next_header(pdfparse.TextBox(directors_h),headers,boxes)
+            text = [tb.text for tb in dir_lines]
+
+            board = pdfparse.parse_directors(text)
+            for mem in board:
+                try:
+                    pers = Person(personal_code=mem["id_code"][0])
+                except (KeyError, IndexError):
+                    continue
+                try:
+                    pers["name"] = mem["name"]
+                except KeyError:
+                    pass
+                try:
+                    pers["nationality"] = mem["nationality"]
+                except KeyError:
+                    pass
+                relation = PersonCorpRelation(person=pers,
+                            fk_corp_id_code=response.meta['corp_id_code'],
+                            cite_type=u"extract",
+                            cite_link=response.url)
+                try:
+                    relation["relation_type"] = mem["position"]
+                except KeyError:
+                    pass
+
+                log.msg("Added relation from Extract: {}".format(relation), level=log.DEBUG)
+                results.append(relation)
+
+            #s = u"".join([tb.text for tb in dir_lines])
+            #log.msg(unicode(s), level=log.DEBUG)
+        else:
+            log.msg("No directors found.", level=log.DEBUG)
+
+        # Extract ownership info
+        if(owners_h is not None):
+            log.msg(response.url, level=log.DEBUG)
+            own_lines = pdfparse.find_to_next_header(pdfparse.TextBox(owners_h),headers,boxes)
+            s = u"".join([tb.text for tb in own_lines])
+            log.msg(s, level=log.DEBUG)
+        else:
+            log.msg("No owners found.", level=log.DEBUG)
+        
+        return results
+
+    # Each statement also has status docs which come along with it
+    # This function extracts information from those docs.
+    # It appears these docs are duplicative so they probably don't
+    # need to be scraped.
+    #def parse_stmnt_status_pdf(self, response):
+    #    pass
+
+    # There are a lot of tables where the header
+    # is in column 0, and the info we want is in column 1.
+    # So this just searches for a td matching the header
+    # string and then returns its next sibling.
+    def _get_header_sib(self, soup, header):
+        regx = re.compile(header)
+        res = soup.find("td",text=regx)
+        if res is not None:
+            next_col = res.find_next_sibling("td")
+            return next_col
+
+    def _person_from_statement_cell(self, cell):
         pers = Person()
         for s in cell.stripped_strings:
             parts = s.split(u"(პ/ნ:")
@@ -444,31 +595,6 @@ class CorporationSpider(BaseSpider):
             else:
                 pers['address'] = s
         return pers
-
-    def parse_corp_pdf(self, response):
-        pass
-
-    # Each statement may have an output document which is "prepared"
-    # for that statement. This function scrapes those documents
-    def parse_stmnt_prepared_pdf(self, response):
-        #log.msg(response.body, level=log.INFO)
-        pass
-
-    # Each statement also has status PDFs which come along with it
-    # This function extracts information from those PDFs.
-    def parse_stmnt_status_pdf(self, response):
-        pass
-
-    # There are a lot of tables where the header
-    # is in column 0, and the info we want is in column 1.
-    # So this just searches for a td matching the header
-    # string and then returns its next sibling.
-    def get_header_sib(self, soup, header):
-        regx = re.compile(header)
-        res = soup.find("td",text=regx)
-        if res is not None:
-            next_col = res.find_next_sibling("td")
-            return next_col
 
     def parse(self, response):
         pass
