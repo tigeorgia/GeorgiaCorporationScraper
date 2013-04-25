@@ -1,4 +1,5 @@
-from scrapy.contrib.exporter import JsonLinesItemExporter
+from scrapy.contrib.exporter import JsonLinesItemExporter, BaseItemExporter
+from scrapy.utils.serialize import ScrapyJSONEncoder
 from scrapy import signals
 from scrapy.exceptions import DropItem, CloseSpider
 from scrapy.item import Item
@@ -7,7 +8,7 @@ import registry.items
 import codecs
 import collections
 
-from items import Corporation
+from items import Corporation, Document, Person, PersonCorpRelation, RegistryStatement
 
 # Define your item pipelines here
 #
@@ -38,6 +39,27 @@ class RemoveWhitespacePipeline(object):
         else:
             return item
 
+class StatisticsPipeline(object):
+    """ Collects basic statistics about stuff passing through."""
+    def __init__(self, stats):
+        self.stats = stats
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(crawler.stats)
+
+    def process_item(self, item, spider):
+        if isinstance(item, Document):
+            self.stats.inc_value('spider/documents/count')
+        if isinstance(item, RegistryStatement):
+            self.stats.inc_value('spider/statements/count')
+        if isinstance(item, Person):
+            self.stats.inc_value('spider/people/count')
+        if isinstance(item, PersonCorpRelation):
+            self.stats.inc_value('spider/relations/count')
+        return item
+        
+        
 
 class DropBlankCorporationsPipeline(object):
     def __init__(self, stats):
@@ -62,8 +84,23 @@ class DropBlankCorporationsPipeline(object):
             if no_docs and no_info:
                 self.stats.inc_value('spider/corporation/blank')
                 raise DropItem("Corporation id {} appears to be blank.".format(item.id_code_reestri_db))
-        
+            self.stats.inc_value('spider/corporation/count')
         return item
+
+class UnicodeJsonLinesItemExporter(BaseItemExporter):
+    """ Allows exporting to JSON directly as Unicode. """
+    def __init__(self, file, **kwargs):
+        self._configure(kwargs)
+        self.file = file
+        kwargs["ensure_ascii"] = False
+        self.encoder = ScrapyJSONEncoder(**kwargs)
+
+    def export_item(self, item):
+        itemdict = dict(self._get_serialized_fields(item))
+        self.file.write(self.encoder.encode(itemdict) + u"\n")
+
+    def serialize_field(self, field, name, value):
+        return value # DON'T call super version, this encodes the Unicode.
 
 # Exports to multiple JsonLines files, one file per Item
 # in items.py
@@ -83,9 +120,9 @@ class MultiFileJsonLinesPipeline(object):
         directory = dir(registry.items)
         for name in directory:
             if name not in ['__builtins__','__doc__','__file__','__name__','__package__']:
-                ofile = codecs.open(name+".json",'w+b',encoding="utf-8")
+                ofile = codecs.open(name+".json",'w+b',encoding="utf-8-sig")
                 self.files.append(ofile)
-                self.exporters[name] = JsonLinesItemExporter(ofile)
+                self.exporters[name] = UnicodeJsonLinesItemExporter(ofile)
                 self.exporters[name].start_exporting()
 
     def spider_closed(self, spider):
