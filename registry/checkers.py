@@ -58,6 +58,8 @@ def check_nationality(string):
     else: # Do a word-by-word search, but with more stringent matching
         strings = string.split()
         count = 0.0
+        if _find_similarity(string, u"რესპუბლიკა") > 0.75:
+            count += 1
         for s in strings:
             if s in nationalities or s in demonyms:
                 count += 1
@@ -71,6 +73,8 @@ def check_nationality(string):
 def check_name(string):
     """ Check whether a string appears to be a name."""
     # Skipping this, for now.
+    if u"http://" or u"რესპუბლიკა" in string:
+        return 0.0
     return 0.25
 
 def _find_similarity(string1,string2):

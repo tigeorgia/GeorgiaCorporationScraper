@@ -148,6 +148,10 @@ def parse_directors(array):
                 record[greatest[1]].append(s)
             except KeyError:
                 record[greatest[1]] = [s]
+
+    # Convert arrays into strings
+    for key in record:
+        record[key] = ' '.join(record[key])
     results.append(record)
     return results
 

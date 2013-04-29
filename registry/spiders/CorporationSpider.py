@@ -460,6 +460,9 @@ class CorporationSpider(BaseSpider):
             "direct": u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",
             "owners": u"პარტნიორები",
             "lien": u"ყადაღა/აკრძალვა:",
+            "leasing": u"გირავნობა",
+            "reorganization": u"რეორგანიზაცია",
+            "founders": u"დამფუძნებლები",
         }
         # These documents are PDFs, so they're going to be coming
         # from the PdfToHtml Middleware, which means they'll
