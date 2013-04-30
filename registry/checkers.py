@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import difflib
 import terms
 # Every checker returns a value 0 - 1, or None if a judgment couldn't
