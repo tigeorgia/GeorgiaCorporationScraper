@@ -1,7 +1,27 @@
 # -*- coding: utf-8 -*-
 import os, codecs
 import checkers
+from bs4 import BeautifulSoup
 
+# Headers for extracting different types of data from PDF
+headers = {
+    "extract_date": u"ამონაწერის მომზადების თარიღი:",
+    "subject": u"სუბიექტი",
+    "name": u"საფირმო სახელწოდება:",
+    "address": u"იურიდიული მისამართი:",
+    "email": u"ელექტრონული ფოსტა:",
+    "legal_id_code": u"საიდენტიფიკაციო კოდი:",
+    "legal_form": u"სამართლებრივი ფორმა:",
+    "reg_date": u"სახელმწიფო რეგისტრაციის თარიღი:",
+    "reg_agency": u"მარეგისტრირებელი ორგანო:",
+    "tax_agency": u"საგადასახადო ინსპექცია:",
+    "directors": u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",
+    "owners": u"პარტნიორები",
+    "lien": u"ყადაღა/აკრძალვა:",
+    "leasing": u"გირავნობა",
+    "reorganization": u"რეორგანიზაცია",
+    "founders": u"დამფუძნებლები",
+}
 # Find all the text boxes after the start box
 # until a box that is in headers is found.
 def find_to_next_header(start, headers, search):
@@ -22,6 +42,15 @@ def find_to_next_header(start, headers, search):
         results.append(search[si])
         si += 1
     return results
+
+def get_pdf_lines(start_header,boxes,soup):
+    header_tag = soup.find("text",text=headers[start_header])
+    if header_tag is not None:
+        lines = find_to_next_header(TextBox(header_tag),headers,boxes)
+        return lines
+    else:
+        return None
+
 
 # Find all the text boxes between the two given boxes.
 # The definition of "between" is: on the same line,
@@ -53,6 +82,15 @@ def find_between(start, end,search):
                 results.append(search[i])
 
     return results
+
+def boxes_from_xml(text):
+    soup = BeautifulSoup(text, "xml", from_encoding="utf-8")
+    boxes = []
+    for t in soup.find_all("text"):
+        t['top'] = unicode(int(t['top'])+1200*(int(t.parent['number'])-1))
+        boxes.append(TextBox(t))
+
+    return boxes
 
 # Removes duplicates from a list.
 # Sorts too.
@@ -129,8 +167,10 @@ def parse_directors(array):
             if len(record) == 1:
                 record["id_code"].append(s)
             else: # Non-blank record, create a new record
+                for key in record:
+                    record[key] = ' '.join(record[key])
                 results.append(record)
-                record = {"id_code":[],}
+                record = {"id_code":[s],}
                 
         else: # Not an ID, must be something else.
             # Figure out which of our checkers is most confident

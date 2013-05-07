@@ -148,7 +148,8 @@ class CorporationSpider(BaseSpider):
                               callback=self.parse_corptable,
                               meta={'cookiejar': response.meta['cookiejar'],
                                     'page': str(pg),
-                                    'type': response.meta['cookiejar']})
+                                    'type': response.meta['cookiejar'],
+                                    'tries': 0,})
             yield request
     
     # Parses the table on the search results page in order to
@@ -171,9 +172,11 @@ class CorporationSpider(BaseSpider):
             request.meta['cookiejar'] = response.meta['cookiejar']
             results.append(request)
         
-        if(len(results) == 0):
+        if(len(results) == 0 and response.request.meta['tries'] < 10):
             log.msg("Zero results found on page {} of type {}, retrying".format(response.meta['page'],response.meta['type']))
-            return [response.request.replace(dont_filter=True)]
+            request = response.request.copy()
+            request.meta['tries'] = request.meta['tries'] + 1
+            return [request.replace(dont_filter=True)]
         #log.msg("Found {} results on page {} of type {}".format(len(results),response.meta['page'],response.meta['type']))
         return results
     
@@ -445,61 +448,35 @@ class CorporationSpider(BaseSpider):
     # Each statement may have an output document which is "prepared"
     # for that statement. This function scrapes those documents
     def parse_stmnt_prepared_doc(self, response):
+        return self._info_from_pdf(response.body,response.url, response.meta['corp_id_code'])
+
+    def _info_from_pdf(self,text,url,corp_id_code):
         from scrapy.shell import inspect_response
-        headers = {
-            "extract_date": u"ამონაწერის მომზადების თარიღი:",
-            "subject": u"სუბიექტი",
-            "name": u"საფირმო სახელწოდება:",
-            "address": u"იურიდიული მისამართი:",
-            "email": u"ელექტრონული ფოსტა:",
-            "legal_id_code": u"საიდენტიფიკაციო კოდი:",
-            "legal_form": u"სამართლებრივი ფორმა:",
-            "reg_date": u"სახელმწიფო რეგისტრაციის თარიღი:",
-            "reg_agency": u"მარეგისტრირებელი ორგანო:",
-            "tax_agency": u"საგადასახადო ინსპექცია:",
-            "direct": u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",
-            "owners": u"პარტნიორები",
-            "lien": u"ყადაღა/აკრძალვა:",
-            "leasing": u"გირავნობა",
-            "reorganization": u"რეორგანიზაცია",
-            "founders": u"დამფუძნებლები",
-        }
         # These documents are PDFs, so they're going to be coming
         # from the PdfToHtml Middleware, which means they'll
         # be XML rather than HTML.
-        log.msg("Parsing PDF {}".format(response.url), level=log.DEBUG)
-       
+        log.msg("Parsing PDF {}".format(url), level=log.DEBUG)
+        headers = pdfparse.headers 
         results = []
-        soup = BeautifulSoup(response.body, "xml", from_encoding="utf-8")
-        boxes = []
-        for t in soup.find_all("text"):
-            # Put everything on one "page". Each <page> apparently has height
-            # of about 1200, so offset by 1200*page_num.
-            t['top'] = unicode(int(t['top'])+1200*(int(t.parent['number'])-1))
-            boxes.append(pdfparse.TextBox(t))
-        
+        soup = BeautifulSoup(text, "xml", from_encoding="utf-8")
+        boxes = pdfparse.boxes_from_xml(text)
         boxes = pdfparse.remove_duplicates(boxes) # Handily, this sorts too
         # TextBoxes define sort order as top-to-bottom, left-to-right.
        
-        address_h = soup.find("text", text=headers['address'])
-        email_h = soup.find("text", text=headers['email'])
-        directors_h = soup.find("text", text=headers['direct'])
-        owners_h = soup.find("text", text=headers['owners'])
-        extract_date_h = soup.find("text",text=headers['extract_date'])
         # TODO: Check for malformed / Blank / Something else extracts
         extract = RegistryExtract()
-        extract['fk_corp_id_code'] = response.meta['corp_id_code']
+        extract['fk_corp_id_code'] = corp_id_code
 
         # Get extract date.
-        if extract_date_h is not None:
-            date_lines = pdfparse.find_to_next_header(pdfparse.TextBox(extract_date_h),headers,boxes)
+        date_lines = pdfparse.get_pdf_lines('extract_date',boxes,soup)
+        if date_lines is not None:
             extract['date'] = u"".join([tb.text for tb in date_lines])
 
         # Get mailing address
-        if address_h is not None:
+        address_lines = pdfparse.get_pdf_lines('address',boxes,soup)
+        if address_lines is not None:
             log.msg("Found address, printing: ", level=log.DEBUG)
-            addr_lines = pdfparse.find_to_next_header(pdfparse.TextBox(address_h),headers,boxes)
-            s = u"".join([tb.text for tb in addr_lines])
+            s = u"".join([tb.text for tb in address_lines])
             # TODO: Metrics to check whether we've mis-parsed.
             extract['corp_address'] = s
             log.msg(unicode(s),level=log.DEBUG)
@@ -507,9 +484,9 @@ class CorporationSpider(BaseSpider):
             log.msg("No address found.", level=log.DEBUG)
 
         # Get email address
-        if email_h is not None:
+        email_lines = pdfparse.get_pdf_lines('email',boxes,soup)
+        if email_lines is not None:
             log.msg("Found email, printing: ", level=log.DEBUG)
-            email_lines = pdfparse.find_to_next_header(pdfparse.TextBox(email_h),headers,boxes)
             s = u"".join([tb.text for tb in email_lines])
             log.msg(unicode(s), level=log.DEBUG)
             # TODO: Validate email address to check for mis-parse
@@ -523,15 +500,15 @@ class CorporationSpider(BaseSpider):
         # Parse directors
         # TODO: Lots of extra processing to reliably extract names,
         # ID numbers, ethnicity, and role.
-        if(directors_h is not None):
+        dir_lines = pdfparse.get_pdf_lines('directors',boxes,soup)
+        if(dir_lines is not None):
             log.msg("Found directors block, printing", level=log.DEBUG)
-            dir_lines = pdfparse.find_to_next_header(pdfparse.TextBox(directors_h),headers,boxes)
             text = [tb.text for tb in dir_lines]
 
             board = pdfparse.parse_directors(text)
             for mem in board:
                 try:
-                    pers = Person(personal_code=mem["id_code"][0])
+                    pers = Person(personal_code=mem["id_code"])
                 except (KeyError, IndexError):
                     continue
                 try:
@@ -543,11 +520,11 @@ class CorporationSpider(BaseSpider):
                 except KeyError:
                     pass
                 relation = PersonCorpRelation(person=pers,
-                            fk_corp_id_code=response.meta['corp_id_code'],
+                            fk_corp_id_code=corp_id_code,
                             cite_type=u"extract",
-                            cite_link=response.url)
+                            cite_link=url)
                 try:
-                    relation["relation_type"] = mem["position"]
+                    relation["relation_type"] = [mem["position"]]
                 except KeyError:
                     pass
 
@@ -560,9 +537,9 @@ class CorporationSpider(BaseSpider):
             log.msg("No directors found.", level=log.DEBUG)
 
         # Extract ownership info
-        if(owners_h is not None):
-            log.msg(response.url, level=log.DEBUG)
-            own_lines = pdfparse.find_to_next_header(pdfparse.TextBox(owners_h),headers,boxes)
+        own_lines = pdfparse.get_pdf_lines('owners',boxes,soup)
+        if(own_lines is not None):
+            log.msg(url, level=log.DEBUG)
             s = u"".join([tb.text for tb in own_lines])
             log.msg(s, level=log.DEBUG)
         else:

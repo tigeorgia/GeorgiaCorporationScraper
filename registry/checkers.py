@@ -7,9 +7,11 @@ import terms
 def check_id(string):
     """ Runs a basic check for things that look like ID numbers.
     Currently, simply checks to see that numerals outnumber
-    other types of characters."""
-    if len(string) == 0:
-        return 0
+    other types of characters, and that the string is probably
+    long enough to contain an ID."""
+    string = string.strip()
+    if len(string) == 0 or len(string) < 4:
+        return 0.0
     count = 0.0
     for c in string:
         if c.isdigit():
@@ -74,7 +76,7 @@ def check_nationality(string):
 def check_name(string):
     """ Check whether a string appears to be a name."""
     # Skipping this, for now.
-    if u"http://" or u"რესპუბლიკა" in string:
+    if u"http://" in string or u"რესპუბლიკა" in string:
         return 0.0
     return 0.25
 
