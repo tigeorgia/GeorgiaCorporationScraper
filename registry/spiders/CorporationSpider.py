@@ -172,7 +172,7 @@ class CorporationSpider(BaseSpider):
             request.meta['cookiejar'] = response.meta['cookiejar']
             results.append(request)
         
-        if(len(results) == 0 and response.request.meta['tries'] < 10):
+        if(len(results) == 0 and response.request.meta['tries'] < 3):
             log.msg("Zero results found on page {} of type {}, retrying".format(response.meta['page'],response.meta['type']))
             request = response.request.copy()
             request.meta['tries'] = request.meta['tries'] + 1
