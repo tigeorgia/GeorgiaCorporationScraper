@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import difflib
+import re
 import terms
 # Every checker returns a value 0 - 1, or None if a judgment couldn't
 # be made.
@@ -72,6 +73,14 @@ def check_nationality(string):
         return None
     else:
         return best_match
+
+def check_share(string):
+    match_share_id = re.compile('\d{9}-SH-\d{5}')
+    match_share_pct = re.compile('\d{2}\.\d{8}%')
+    for s in string.split():
+        if match_share_id.search(s) or match_share_pct.search(s):
+            return 1.0
+    return 0.0
 
 def check_name(string):
     """ Check whether a string appears to be a name."""

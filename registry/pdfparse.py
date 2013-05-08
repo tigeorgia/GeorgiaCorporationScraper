@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os, codecs
+import re
 import checkers
 from bs4 import BeautifulSoup
 
@@ -149,9 +150,9 @@ def parse_email(array):
             pass
     return result
 
-def parse_directors(array):
+def parse_directors(text): # Takes array of strings
     # First, flatten the array so we don't have to do a double for-loop
-    strings = [s.strip() for sr in array for s in sr.split(",")]
+    strings = [s.strip() for sr in text for s in sr.split(",")]
     # The first item in every record is going to be an ID number
     # (probably). So if we can make a reasonably good guess about
     # whether a string is an ID number, then we can figure out where
@@ -194,6 +195,61 @@ def parse_directors(array):
         record[key] = ' '.join(record[key])
     results.append(record)
     return results
+
+def parse_owners(text):
+    # First, flatten the array so we don't have to do a double for-loop
+    strings = [s.strip() for sr in text for s in sr.split(",")]
+    drop = [u"წილი", u"ანგარიშის ნომერი"]
+    # The first item in every record is going to be an ID number
+    # (probably). So if we can make a reasonably good guess about
+    # whether a string is an ID number, then we can figure out where
+    # the new records start (with the unfortunate exception that some
+    # records have multiple leading IDs).
+    results = []
+    record = {"id_code": [],}
+    for s in strings:
+        if s in drop or len(s) == 0:
+            continue
+        if checkers.check_share(s) > 0:
+            share_amt = u""
+            for part in s.split():
+                if re.compile('\d{2}\.\d{8}%').match(part):
+                    share_amt = part
+            try:
+                record["share"].append(share_amt)
+            except KeyError:
+                record["share"] = [share_amt]
+        elif checkers.check_id(s) >= 0.5: # Found an ID, might indicate new record.
+            # Two possibilities: blank / non-blank record
+            if len(record) == 1:
+                record["id_code"].append(s)
+            else: # Non-blank record, create a new record
+                for key in record:
+                    record[key] = ' '.join(record[key])
+                results.append(record)
+                record = {"id_code":[s],}
+        else:
+            # Not an ID, must be something else.
+            # Figure out which of our checkers is most confident
+            # and assume that the string is of that type.
+            info_types = [(checkers.check_name,"name"),(checkers.check_nationality,"nationality"),]
+            greatest = (0,"unknown")
+            for typ in info_types:
+                conf = typ[0](s)
+                if conf is not None and conf > greatest[0]:
+                    greatest = (conf, typ[1])
+
+            try:
+                record[greatest[1]].append(s)
+            except KeyError:
+                record[greatest[1]] = [s]
+
+    # Convert arrays into strings
+    for key in record:
+        record[key] = ' '.join(record[key])
+    results.append(record)
+    return results
+
 
 from bs4 import Tag
 class TextBox:

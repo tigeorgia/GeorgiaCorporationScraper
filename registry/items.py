@@ -70,5 +70,6 @@ class PersonCorpRelation(Item):
     person = Field()
     fk_corp_id_code = Field()
     relation_type = Field()
+    share = Field() # Often blank
     cite_type = Field()
     cite_link = Field()

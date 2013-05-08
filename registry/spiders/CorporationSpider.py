@@ -498,8 +498,6 @@ class CorporationSpider(BaseSpider):
 
 
         # Parse directors
-        # TODO: Lots of extra processing to reliably extract names,
-        # ID numbers, ethnicity, and role.
         dir_lines = pdfparse.get_pdf_lines('directors',boxes,soup)
         if(dir_lines is not None):
             log.msg("Found directors block, printing", level=log.DEBUG)
@@ -539,9 +537,36 @@ class CorporationSpider(BaseSpider):
         # Extract ownership info
         own_lines = pdfparse.get_pdf_lines('owners',boxes,soup)
         if(own_lines is not None):
-            log.msg(url, level=log.DEBUG)
-            s = u"".join([tb.text for tb in own_lines])
-            log.msg(s, level=log.DEBUG)
+            log.msg("Found partners block, printing", level=log.DEBUG)
+            text = [tb.text for tb in own_lines]
+            owners = pdfparse.parse_owners(text)
+
+            for o in owners:
+                try:
+                    pers = Person(personal_code=o["id_code"])
+                except KeyError:
+                    continue
+                try:
+                    pers["name"] = o["name"]
+                except KeyError:
+                    pass
+                try:
+                    pers["nationality"] = o["nationality"]
+                except KeyError:
+                    pass
+                relation = PersonCorpRelation(person=pers,
+                            fk_corp_id_code=corp_id_code,
+                            cite_type=u"extract",
+                            cite_link=url)
+                relation["relation_type"] = [u"პარტნიორი"]
+                try:
+                    relation["share"] = o["share"]
+                except KeyError:
+                    pass
+
+                log.msg("Added relation from Extract: {}".format(relation), level=log.DEBUG)
+                results.append(relation)
+
         else:
             log.msg("No owners found.", level=log.DEBUG)
         
