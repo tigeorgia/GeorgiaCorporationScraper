@@ -46,7 +46,7 @@ class CorporationSpider(BaseSpider):
             
                 request = Request(self.base_url, 
                               #formdata=form_data,
-                              callback=self.search_with_cookies,
+                              callback=self.setup_cookies,
                               dont_filter=True,
                               meta={'cookiejar': opt['value'],
                                     'corp_class': opt['value']})
@@ -94,18 +94,22 @@ class CorporationSpider(BaseSpider):
     # This site does some incredibly stupid things with cookies
     # so we need to use a separate cookie jar for each type of
     # corporation that we will scrape.
-    def search_with_cookies(self, response):
+    def setup_cookies(self, response):
         form_data ={'c': 'search',
                     'm': 'find_legal_persons',
                     's_legal_person_idnumber':'',
                     's_legal_person_name':''}
         
-        form_data['s_legal_person_form'] = response.meta['corp_class'];
+        form_data['s_legal_person_form'] = response.meta['cookiejar']
 
-        return [FormRequest(self.base_url,
+        request = FormRequest(self.base_url,
                             formdata=form_data,
                             callback=self.parse_corpresults,
-                            meta={'cookiejar': response.meta['cookiejar']})]
+                            meta={'cookiejar': response.meta['cookiejar']})
+        if 'renew' in response.meta:
+            request.meta['renew'] = response.meta['renew']
+            request.meta['page'] = response.meta['page']
+        yield request
     
     # Finds out how many pages of results there are and launches
     # requests for them.
@@ -117,7 +121,20 @@ class CorporationSpider(BaseSpider):
         form_data ={'c': 'search',
                     'm': 'find_legal_persons',
                    }
-
+        # The site does some dumb things with session variables, sometimes
+        # they need to get renewed.
+        if 'renew' in response.meta:
+            form_data['p'] = response.meta['page']
+            request = FormRequest(self.base_url,
+                              formdata=form_data,
+                              callback=self.parse_corptable,
+                              meta={'cookiejar': response.meta['cookiejar'],
+                                    'page': response.meta['page'],
+                                    'type': response.meta['cookiejar'],
+                                    })
+            yield request
+        # Otherwise, this is our first time viewing this result type, and
+        # we start from the beginning.
         soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
         cells = soup.find_all("td")
         td = None
@@ -149,7 +166,7 @@ class CorporationSpider(BaseSpider):
                               meta={'cookiejar': response.meta['cookiejar'],
                                     'page': str(pg),
                                     'type': response.meta['cookiejar'],
-                                    'tries': 0,})
+                                    })
             yield request
     
     # Parses the table on the search results page in order to
@@ -172,11 +189,16 @@ class CorporationSpider(BaseSpider):
             request.meta['cookiejar'] = response.meta['cookiejar']
             results.append(request)
         
-        if(len(results) == 0 and response.request.meta['tries'] < 3):
-            log.msg("Zero results found on page {} of type {}, retrying".format(response.meta['page'],response.meta['type']))
-            request = response.request.copy()
-            request.meta['tries'] = request.meta['tries'] + 1
-            return [request.replace(dont_filter=True)]
+        if(len(results) == 0):
+            log.msg("Zero results found on page {} of type {}, renewing cookies".format(response.meta['page'],response.meta['type']))
+            request = Request(self.base_url, 
+                          callback=self.setup_cookies,
+                          dont_filter=True,
+                          meta={'cookiejar': response.meta['cookiejar'],
+                                'renew': True,
+                                'page': response.meta['page'],
+                                })
+            return [request]
         #log.msg("Found {} results on page {} of type {}".format(len(results),response.meta['page'],response.meta['type']))
         return results
     
