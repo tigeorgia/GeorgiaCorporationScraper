@@ -177,6 +177,7 @@ class CorporationSpider(BaseSpider):
         # button images. So we get the info images, and then
         # extract the db id from their parents.
         #log.msg("Parsing corp results table")
+        log.msg("Parsing page {} of type {}".format(response.meta['page'],response.meta['type']))
         soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
         buttons = soup.find_all("img",src="https://enreg.reestri.gov.ge/images/info.png")
         results = []
