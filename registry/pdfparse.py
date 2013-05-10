@@ -213,7 +213,7 @@ def parse_owners(text):
         if checkers.check_share(s) > 0:
             share_amt = u""
             for part in s.split():
-                if re.compile('\d{2}\.\d{8}%').match(part):
+                if re.compile('\d{1,3}\.\d{8}%').match(part):
                     share_amt = part
             try:
                 record["share"].append(share_amt)
