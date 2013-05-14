@@ -50,8 +50,8 @@ class CorporationSpider(BaseSpider):
                 request = Request(self.base_url, 
                               callback=self.setup_cookies,
                               dont_filter=True,
-                              meta={'cookiejar': opt['value'],
-                                    'corp_class': opt['value']})
+                              meta={'cookiejar': str(form),
+                                    'corp_class': str(form),})
                 yield request
         else: # Guess ID numbers instead
             form_data ={'c': 'search',
