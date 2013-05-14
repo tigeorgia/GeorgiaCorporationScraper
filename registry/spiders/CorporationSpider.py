@@ -102,13 +102,20 @@ class CorporationSpider(BaseSpider):
         
         form_data['s_legal_person_form'] = response.meta['cookiejar']
 
-        request = FormRequest(self.base_url,
+        if 'renew' in response.meta:
+            request = FormRequest(self.base_url,
+                            dont_filter=True,
+                            formdata=form_data,
+                            callback=self.parse_corpresults,
+                            meta={'cookiejar': response.meta['cookiejar'],
+                                  'renew': response.meta['renew'],
+                                  'page': response.meta['page'],})
+        else:
+            request = FormRequest(self.base_url,
                             formdata=form_data,
                             callback=self.parse_corpresults,
                             meta={'cookiejar': response.meta['cookiejar']})
-        if 'renew' in response.meta:
-            request.meta['renew'] = response.meta['renew']
-            request.meta['page'] = response.meta['page']
+
         yield request
     
     # Finds out how many pages of results there are and launches
@@ -126,6 +133,7 @@ class CorporationSpider(BaseSpider):
         if 'renew' in response.meta:
             form_data['p'] = response.meta['page']
             request = FormRequest(self.base_url,
+                              dont_filter=True,
                               formdata=form_data,
                               callback=self.parse_corptable,
                               meta={'cookiejar': response.meta['cookiejar'],
