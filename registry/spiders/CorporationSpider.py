@@ -34,18 +34,20 @@ class CorporationSpider(BaseSpider):
     # Grabs the different corporation classes from the search
     # form dropdown menu.
     def parse_corpclasses(self, response):
-        #log.msg("in parse_corpclasses")
+        # So it turns out this function is fairly useless because the
+        # dropdown menu is missing a TON of corporation types.
+        # For now, we'll just put in a list, until/unless there's a 
+        # better solution.
         soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
         form = soup.find(id="s_search_persons_form")
         if self.page_by_page == True:
-            for opt in form.find_all("option"):
-                # 0 is nothing. Skip individuals for dev.
-                if(opt['value'] == '0' or opt['value'] == '1'):
-                    continue
-                #log.msg("Found corp class: {}".format(opt['value']))
-            
+            # results can also be found in 1 and 16, but both appear
+            # to be just individuals, without any other helpful info.
+            # Skip these for speed, for now.
+            corp_forms = [2,3,4,5,6,7,8,9,10,11,12,13,15,17,
+                          22,23,24,25,26,27,28,29,99,100]
+            for form in corp_forms:
                 request = Request(self.base_url, 
-                              #formdata=form_data,
                               callback=self.setup_cookies,
                               dont_filter=True,
                               meta={'cookiejar': opt['value'],
