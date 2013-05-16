@@ -28,75 +28,31 @@ class CorporationSpider(BaseSpider):
     # Override so that we can set our cookie easily.
     def start_requests(self):
         #log.msg("in start_requests")
-        my_url = self.base_url+"?c=app&m=search_form"
-        yield Request(my_url, callback=self.parse_corpclasses)
 
-    # Grabs the different corporation classes from the search
-    # form dropdown menu.
-    def parse_corpclasses(self, response):
-        # So it turns out this function is fairly useless because the
-        # dropdown menu is missing a TON of corporation types.
-        # For now, we'll just put in a list, until/unless there's a 
-        # better solution.
-        soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
-        form = soup.find(id="s_search_persons_form")
-        if self.page_by_page == True:
-            # results can also be found in 1 and 16, but both appear
-            # to be just individuals, without any other helpful info.
-            # Skip these for speed, for now.
-            corp_forms = [2,3,4,5,6,7,8,9,10,11,12,13,15,17,
-                          22,23,24,25,26,27,28,29,99,100]
-            for form in corp_forms:
-                request = Request(self.base_url, 
-                              callback=self.setup_cookies,
-                              dont_filter=True,
-                              meta={'cookiejar': str(form),
-                                    'corp_class': str(form),})
-                yield request
-        else: # Guess ID numbers instead
-            form_data ={'c': 'search',
-                    'm': 'find_legal_persons',
-                    's_legal_person_idnumber':'',
-                    's_legal_person_name':'',
-                    's_legal_person_form': '1'}
-        
-            yield FormRequest(self.base_url,
-                            formdata=form_data,
-                            callback=self.guess_biggest_id)
-
-    # This works but overflows memory because there are about
-    # 10M id numbers but only about 500k real corporations.
-    # Used when page_by_page set to True, so don't do that right now.
-    def guess_biggest_id(self, response):
-        """ We assume that corporation listings are listed
-        approximately in the order that they were created.
-        Therefore the most recently updated corporation is
-        the one first on the list. This is usually going to
-        be on the individual entrepreneurs page, it has the
-        most activity. So scrape that, get the first id, and
-        then count up to that; that'll give us a rough idea
-        of how many there are."""
-        soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
-        buttons = soup.find_all("img",src="https://enreg.reestri.gov.ge/images/info.png")
+        # Scraping the search dropdown menu is incomplete
+        # Scraping with all results is difficult (can't get it to work),
+        # slow (~5.5s per results page), and includes Individual Entrepreneurs,
+        # which aren't very interesting. So, I'm hardcoding a list of corp
+        # types which will be searched. TODO: Allow list to be determined
+        # at runtime.
+        # results can also be found in 1 and 16, but both appear
+        # to be just individuals, without any other helpful info.
+        corp_forms = [2,3,4,5,6,7,8,9,10,11,12,13,15,17,
+                      22,23,24,25,26,27,28,29,99,100]
         results = []
-        
-        for b in buttons:
-            dbid = b.parent['onclick'].split("(")[-1].rstrip(")")
-            results.append(int(dbid))
-        
-        biggest = sorted(results)[-1]+1
-        log.msg("Guessing biggest is {}".format(biggest)) 
-        for dbid in range(0,biggest):
-            corp_url = self.base_url+"?c=app&m=show_legal_person&legal_code_id={}".format(dbid)
-            request = Request(url=corp_url,callback=self.parse_corpdetails)
-            request.meta['id_code_reestri_db'] = dbid
-            request.meta['cookiejar'] = '1' # Don't need a separate jar
-            yield request
-
+        for form in corp_forms:
+            request = Request(self.base_url, 
+                          callback=self.setup_cookies,
+                          dont_filter=True,
+                          meta={'cookiejar': str(form),
+                                'corp_class': str(form),})
+            results.append(request)
+        return results
     # This site does some incredibly stupid things with cookies
     # so we need to use a separate cookie jar for each type of
     # corporation that we will scrape.
     def setup_cookies(self, response):
+
         form_data ={'c': 'search',
                     'm': 'find_legal_persons',
                     's_legal_person_idnumber':'',
@@ -111,6 +67,7 @@ class CorporationSpider(BaseSpider):
                             callback=self.parse_corpresults,
                             meta={'cookiejar': response.meta['cookiejar'],
                                   'renew': response.meta['renew'],
+                                  'total': response.meta['total'],
                                   'page': response.meta['page'],})
         else:
             request = FormRequest(self.base_url,
@@ -139,6 +96,7 @@ class CorporationSpider(BaseSpider):
                               formdata=form_data,
                               callback=self.parse_corptable,
                               meta={'cookiejar': response.meta['cookiejar'],
+                                    'total': response.meta['total'],
                                     'page': response.meta['page'],
                                     'type': response.meta['cookiejar'],
                                     })
@@ -164,20 +122,24 @@ class CorporationSpider(BaseSpider):
         total_results = float(td.find("strong").string)
         total_pages = int(math.ceil(total_results/RESULTS_PER_PAGE))
         #log.msg("Total pages: {}".format(str(total_pages)))
+        log.msg("Total results: {}".format(str(total_results)))
         # Scrapy generally tends to scrape last page first,
         # so reverse the order we return the results so that
         # earlier pages are scraped earlier and easier to manually
         # debug in a browser.
-        for pg in reversed(range(1,total_pages+1)):
-            form_data["p"]=str(pg)
-            request = FormRequest(self.base_url,
-                              formdata=form_data,
-                              callback=self.parse_corptable,
-                              meta={'cookiejar': response.meta['cookiejar'],
-                                    'page': str(pg),
-                                    'type': response.meta['cookiejar'],
-                                    })
-            yield request
+        #for pg in reversed(range(1,total_pages+1)):
+        start_page = 1
+        form_data["p"]=str(start_page)
+        request = FormRequest(self.base_url,
+                      dont_filter=True,
+                      formdata=form_data,
+                      callback=self.parse_corptable,
+                      meta={'cookiejar': response.meta['cookiejar'],
+                            'page': start_page,
+                            'total': total_pages,
+                            'type': response.meta['cookiejar'],
+                            })
+        yield request
     
     # Parses the table on the search results page in order to
     # get links to individual corporation detail pages.
@@ -187,7 +149,7 @@ class CorporationSpider(BaseSpider):
         # button images. So we get the info images, and then
         # extract the db id from their parents.
         #log.msg("Parsing corp results table")
-        log.msg("Parsing page {} of type {}".format(response.meta['page'],response.meta['type']))
+        log.msg("Parsing page {}/{} of type {}".format(response.meta['page'],response.meta['total'],response.meta['type']))
         soup = BeautifulSoup(response.body, "html5lib", from_encoding="utf-8")
         buttons = soup.find_all("img",src="https://enreg.reestri.gov.ge/images/info.png")
         results = []
@@ -200,17 +162,37 @@ class CorporationSpider(BaseSpider):
             request.meta['cookiejar'] = response.meta['cookiejar']
             results.append(request)
         
-        if(len(results) == 0):
-            log.msg("Zero results found on page {} of type {}, renewing cookies".format(response.meta['page'],response.meta['type']))
+        # We also need to click the "Next" button
+        next_btn = soup.find_all("img",src="https://enreg.reestri.gov.ge/images/next.png")
+        if len(next_btn) > 0: # Found it.
+            page_num = next_btn[0].parent['onclick'].replace(u'legal_person_paginate',u'').strip(u"()")
+            form_data ={'c': 'search',
+                        'm': 'find_legal_persons',
+                        'p': page_num,}
+            request = FormRequest(self.base_url,
+                          dont_filter=True,
+                          formdata=form_data,
+                          callback=self.parse_corptable,
+                          meta={'cookiejar': response.meta['cookiejar'],
+                                'page': int(page_num),
+                                'total': response.meta['total'],
+                                'type': response.meta['cookiejar'],
+                                })
+            results.append(request)
+        # If there's no Next button
+        elif response.meta['page'] < response.meta['total']:
+            log.msg("No next button found on page {}/{} of type {}, renewing cookies".format(response.meta['page'],response.meta['total'],response.meta['type']))
             request = Request(self.base_url, 
                           callback=self.setup_cookies,
                           dont_filter=True,
                           meta={'cookiejar': response.meta['cookiejar'],
                                 'renew': True,
                                 'page': response.meta['page'],
+                                'total': response.meta['total'],
+                                'type': response.meta['cookiejar'],
                                 })
-            return [request]
-        #log.msg("Found {} results on page {} of type {}".format(len(results),response.meta['page'],response.meta['type']))
+            results.append(request)
+
         return results
     
     # Here we finally get to actually scrape something
