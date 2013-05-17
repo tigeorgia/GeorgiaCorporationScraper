@@ -129,17 +129,29 @@ class CorporationSpider(BaseSpider):
         # debug in a browser.
         #for pg in reversed(range(1,total_pages+1)):
         start_page = 1
-        form_data["p"]=str(start_page)
-        request = FormRequest(self.base_url,
-                      dont_filter=True,
-                      formdata=form_data,
-                      callback=self.parse_corptable,
-                      meta={'cookiejar': response.meta['cookiejar'],
-                            'page': start_page,
-                            'total': total_pages,
-                            'type': response.meta['cookiejar'],
-                            })
-        yield request
+        for pg in reversed(range(1,total_pages+1)):
+            form_data["p"]=str(pg)
+            request = FormRequest(self.base_url,
+                              formdata=form_data,
+                              dont_filter=True,
+                              callback=self.parse_corptable,
+                              meta={'cookiejar': response.meta['cookiejar'],
+                                    'page': pg,
+                                    'total': total_pages,
+                                    'type': response.meta['cookiejar'],
+                                    })
+            yield request
+        #form_data["p"]=str(start_page)
+        #request = FormRequest(self.base_url,
+        #              dont_filter=True,
+        #              formdata=form_data,
+        #              callback=self.parse_corptable,
+        #              meta={'cookiejar': response.meta['cookiejar'],
+        #                    'page': start_page,
+        #                    'total': total_pages,
+        #                    'type': response.meta['cookiejar'],
+        #                    })
+        #yield request
     
     # Parses the table on the search results page in order to
     # get links to individual corporation detail pages.
