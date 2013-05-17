@@ -175,25 +175,25 @@ class CorporationSpider(BaseSpider):
             results.append(request)
         
         # We also need to click the "Next" button
-        next_btn = soup.find_all("img",src="https://enreg.reestri.gov.ge/images/next.png")
-        if len(next_btn) > 0: # Found it.
-            page_num = next_btn[0].parent['onclick'].replace(u'legal_person_paginate',u'').strip(u"()")
-            form_data ={'c': 'search',
-                        'm': 'find_legal_persons',
-                        'p': page_num,}
-            request = FormRequest(self.base_url,
-                          dont_filter=True,
-                          formdata=form_data,
-                          callback=self.parse_corptable,
-                          meta={'cookiejar': response.meta['cookiejar'],
-                                'page': int(page_num),
-                                'total': response.meta['total'],
-                                'type': response.meta['cookiejar'],
-                                })
-            results.append(request)
+        #next_btn = soup.find_all("img",src="https://enreg.reestri.gov.ge/images/next.png")
+        #if len(next_btn) > 0: # Found it.
+        #    page_num = next_btn[0].parent['onclick'].replace(u'legal_person_paginate',u'').strip(u"()")
+        #    form_data ={'c': 'search',
+        #                'm': 'find_legal_persons',
+        #                'p': page_num,}
+        #    request = FormRequest(self.base_url,
+        #                  dont_filter=True,
+        #                  formdata=form_data,
+        #                  callback=self.parse_corptable,
+        #                  meta={'cookiejar': response.meta['cookiejar'],
+        #                        'page': int(page_num),
+        #                        'total': response.meta['total'],
+        #                        'type': response.meta['cookiejar'],
+        #                        })
+        #    results.append(request)
         # If there's no Next button
-        elif response.meta['page'] < response.meta['total']:
-            log.msg("No next button found on page {}/{} of type {}, renewing cookies".format(response.meta['page'],response.meta['total'],response.meta['type']))
+        if response.meta['page'] < response.meta['total'] and len(results) == 0:
+            log.msg("No results found on page {}/{} of type {}, renewing cookies".format(response.meta['page'],response.meta['total'],response.meta['type']))
             request = Request(self.base_url, 
                           callback=self.setup_cookies,
                           dont_filter=True,
