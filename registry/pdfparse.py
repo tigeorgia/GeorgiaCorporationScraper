@@ -1,27 +1,28 @@
 # -*- coding: utf-8 -*-
 import os, codecs
+import itertools
 import re
 import checkers
 from bs4 import BeautifulSoup
 
 # Headers for extracting different types of data from PDF
 headers = {
-    "extract_date": u"ამონაწერის მომზადების თარიღი:",
-    "subject": u"სუბიექტი",
-    "name": u"საფირმო სახელწოდება:",
-    "address": u"იურიდიული მისამართი:",
-    "email": u"ელექტრონული ფოსტა:",
-    "legal_id_code": u"საიდენტიფიკაციო კოდი:",
-    "legal_form": u"სამართლებრივი ფორმა:",
-    "reg_date": u"სახელმწიფო რეგისტრაციის თარიღი:",
-    "reg_agency": u"მარეგისტრირებელი ორგანო:",
-    "tax_agency": u"საგადასახადო ინსპექცია:",
-    "directors": u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",
-    "owners": u"პარტნიორები",
-    "lien": u"ყადაღა/აკრძალვა:",
-    "leasing": u"გირავნობა",
-    "reorganization": u"რეორგანიზაცია",
-    "founders": u"დამფუძნებლები",
+    "extract_date": [u"ამონაწერის მომზადების თარიღი:"],
+    "subject": [u"სუბიექტი"],
+    "name": [u"საფირმო სახელწოდება:"],
+    "address": [u"იურიდიული მისამართი:"],
+    "email": [u"ელექტრონული ფოსტა:"],
+    "legal_id_code": [u"საიდენტიფიკაციო კოდი:"],
+    "legal_form": [u"სამართლებრივი ფორმა:"],
+    "reg_date": [u"სახელმწიფო რეგისტრაციის თარიღი:"],
+    "reg_agency": [u"მარეგისტრირებელი ორგანო:"],
+    "tax_agency": [u"საგადასახადო ინსპექცია:"],
+    "directors": [u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",u"დირექტორები",],
+    "partners": [u"პარტნიორები",u"დამფუძნებლები",],
+    "lien": [u"ყადაღა/აკრძალვა:"],
+    "leasing": [u"გირავნობა"],
+    "reorganization": [u"რეორგანიზაცია"],
+    "founders": [u"დამფუძნებლები"],
 }
 # Find all the text boxes after the start box
 # until a box that is in headers is found.
@@ -38,7 +39,8 @@ def find_to_next_header(start, headers, search):
             print(u"Current: {}".format(tb))
             return results
         si += 1
-    while si < len(search) and search[si].text not in headers.values():
+    all_strings = list(itertools.chain(*headers.values()))
+    while si < len(search) and search[si].text not in all_strings:
         #print(u"checking {}".format(search[si+1].text))
         results.append(search[si])
         si += 1

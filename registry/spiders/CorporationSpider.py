@@ -15,7 +15,7 @@ from registry import pdfparse
 
 class CorporationSpider(BaseSpider):
     name = "corps"
-    page_by_page = True # Scrape page-by-page -- VERY slow (~19+ days)
+    page_by_page = True # Scrape page-by-page -- pretty slow (~40 hours)
                         # Guess db ids, MUCH faster for individual IDs,
                         # But the IDs aren't contiguous enough for this
                         # to be useful; there are ~500K corporations
@@ -562,7 +562,7 @@ class CorporationSpider(BaseSpider):
             log.msg("No directors found.", level=log.DEBUG)
 
         # Extract ownership info
-        own_lines = pdfparse.get_pdf_lines('owners',boxes,soup)
+        own_lines = pdfparse.get_pdf_lines('partners',boxes,soup)
         if(own_lines is not None):
             log.msg("Found partners block, printing", level=log.DEBUG)
             text = [tb.text for tb in own_lines]
