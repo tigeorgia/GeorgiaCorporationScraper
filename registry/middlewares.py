@@ -3,6 +3,20 @@ import codecs
 from scrapy.exceptions import IgnoreRequest
 from scrapy.http import TextResponse
 from registry.settings import PDFTOHTML_TEMP_DIR as tmp
+from scrapy.contrib.downloadermiddleware.retry import RetryMiddleware
+from twisted.internet.error import TimeoutError as ServerTimeoutError, \
+    DNSLookupError, ConnectionRefusedError, ConnectionDone, ConnectError, \
+    ConnectionLost, TCPTimedOutError, SSLError
+from twisted.internet.defer import TimeoutError as UserTimeoutError
+
+class RetrySSLMiddleware(RetryMiddleware):
+    # IOError is raised by the HttpCompression middleware when trying to
+    # decompress an empty response
+    EXCEPTIONS_TO_RETRY = (ServerTimeoutError, UserTimeoutError, DNSLookupError,
+                           ConnectionRefusedError, ConnectionDone, ConnectError,
+                           ConnectionLost, TCPTimedOutError,SSLError,
+                           IOError)
+
 class DropDjvuMiddleware(object):
     
     def __init__(self, stats):
