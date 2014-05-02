@@ -54,9 +54,11 @@ class RegistryStatement(Item):
 
 class RegistryExtract(Item):
     fk_corp_id_code = Field()
+    corp_url = Field()
     date = Field()
     corp_address = Field()
     corp_email = Field()
+    corp_legalform = Field()
 
 class Person(Item):
     name = Field()

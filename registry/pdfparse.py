@@ -9,12 +9,16 @@ from bs4 import BeautifulSoup
 headers = {
     "extract_date": [u"ამონაწერის მომზადების თარიღი:"],
     "subject": [u"სუბიექტი"],
-    "name": [u"საფირმო სახელწოდება:"],
+    "name": [u"საფირმო სახელწოდება:",u"სახელწოდება:"],
     "address": [u"იურიდიული მისამართი:"],
     "email": [u"ელექტრონული ფოსტა:"],
-    "legal_id_code": [u"საიდენტიფიკაციო კოდი:"],
+    "phone": [u"ტელეფონი:"],    
+    "legal_id_code1": [u"საიდენტიფიკაციო"],
+    "legal_id_code2": [u"საიდენტიფიკაციო კოდი:"],
     "legal_form": [u"სამართლებრივი ფორმა:"],
-    "reg_date": [u"სახელმწიფო რეგისტრაციის თარიღი:"],
+    "reg_date": [u"სახელმწიფო"],
+    "reg_date2": [u"სახელმწიფო რეგისტრაციის"],
+    "reg_date3": [u"სახელმწიფო რეგისტრაციის თარიღი:"],
     "reg_agency": [u"მარეგისტრირებელი ორგანო:"],
     "tax_agency": [u"საგადასახადო ინსპექცია:"],
     "directors": [u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",u"დირექტორები",],
@@ -24,6 +28,99 @@ headers = {
     "reorganization": [u"რეორგანიზაცია"],
     "founders": [u"დამფუძნებლები"],
 }
+
+english_headers = {
+    "extract_date": ["Extract Preparation Date:"],
+    "subject": ["Entity"],
+    "name": ["Firm name:"],
+    "address": ["Legal address:"],
+    "email": ["E-mail:"],
+    "phone": [u"ტელეფონი:"],    
+    "legal_id_code": ["Identification code:"],
+    "legal_form": ["Legal form:"],
+    "reg_date": ["State registration date:"],
+    "reg_agency": ["Registering authority:"],
+    "tax_agency": ["Tax inspection authority:"],
+    "directors": ["Persons Entitled To Manage / To Represent"],
+    "partners": ["Partners"],
+    "lien": ["Lien/Injunction:"],
+    "leasing": [u"Leasing"],
+    "reorganization": [u"Reorganization"],
+    "founders": [u"Founders"],
+}
+
+headers_new_format = {
+    "extract_date": [u"ამონაწერის მომზადების თარიღი:"],
+    "subject": [u"სუბიექტი"],
+    "name": [u"სახელწოდება:"],
+    "address": [u"მისამართი:"],
+    "email": [u"ფოსტა:"],
+    "phone": [u"ტელეფონი:"],    
+    "legal_id_code": [u"კოდი:"],
+    "legal_form": [u"ფორმა:"],
+    "reg_date":[u"თარიღი:"],
+    "reg_agency": [u"ორგანო:"],
+    "tax_agency": [u"საგადასახადო ინსპექცია:"],
+    "directors": [u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",u"დირექტორები",],
+    "partners": [u"პარტნიორები",u"დამფუძნებლები",],
+    "lien": [u"ყადაღა/აკრძალვა:"],
+    "leasing": [u"გირავნობა"],
+    "reorganization": [u"რეორგანიზაცია"],
+    "founders": [u"დამფუძნებლები"],
+}
+
+all_splited_headers = {
+    "extract_date": [u"ამონაწერის მომზადების თარიღი:"],
+    "subject": [u"სუბიექტი"],
+    "name1": [u"საფირმო"],
+    "name2": [u"სახელწოდება:"],
+    "address1": [u"იურიდიული"],
+    "address2": [u"მისამართი:"],
+    "email1": [u"ელექტრონული"],
+    "email2": [u"ფოსტა:"],
+    "phone": [u"ტელეფონი:"],
+    "legal_id_code1": [u"საიდენტიფიკაციო"],
+    "legal_id_code2": [u"კოდი:"],
+    "legal_form1": [u"ფორმა:"],
+    "legal_form2": [u"ფორმა:"],
+    "reg_date1": [u"სახელმწიფო"],
+    "reg_date2":[u"რეგისტრაციის"],
+    "reg_date3":[u"თარიღი:"],
+    "reg_agency1": [u"მარეგისტრირებელი"],
+    "reg_agency2": [u"ორგანო:"],
+    "tax_agency": [u"საგადასახადო ინსპექცია:"],
+    "directors": [u"ხელმძღვანელობაზე/წარმომადგენლობაზე უფლებამოსილი პირები",u"დირექტორები",],
+    "partners": [u"პარტნიორები",u"დამფუძნებლები",],
+    "lien": [u"ყადაღა/აკრძალვა:"],
+    "leasing": [u"გირავნობა"],
+    "reorganization": [u"რეორგანიზაცია"],
+    "founders": [u"დამფუძნებლები"],
+}
+
+headers_to_check_boxes = {
+    "name": [u"საფირმო სახელწოდება:"],
+    "address": [u"იურიდიული მისამართი:"],
+    "email": [u"ელექტრონული ფოსტა:"],
+    "phone": [u"ტელეფონი:"],    
+    "legal_id_code": [u"საიდენტიფიკაციო კოდი:"],
+    "legal_form": [u"სამართლებრივი ფორმა:"],
+    "reg_date": [u"სახელმწიფო რეგისტრაციის თარიღი:"],
+    "reg_agency": [u"მარეგისტრირებელი ორგანო:"],
+    "tax_agency": [u"საგადასახადო ინსპექცია:"],
+}
+
+simple_headers_to_check_boxes = {
+    "name": [u"სახელწოდება:"],
+    "address": [u"მისამართი:"],
+    "email": [u"ელექტრონული ფოსტა:"],
+    "phone": [u"ტელეფონი:"],    
+    "legal_id_code": [u"კოდი:"],
+    "legal_form": [u"ფორმა:"],
+    "reg_date":[u"თარიღი:"],
+    "reg_agency": [u"ორგანო:"],
+    "tax_agency": [u"საგადასახადო ინსპექცია:"],
+}
+
 # Find all the text boxes after the start box
 # until a box that is in headers is found.
 def find_to_next_header(start, headers, search):
@@ -40,16 +137,63 @@ def find_to_next_header(start, headers, search):
             return results
         si += 1
     all_strings = list(itertools.chain(*headers.values()))
-    while si < len(search) and search[si].text not in all_strings:
-        #print(u"checking {}".format(search[si+1].text))
+    while si < len(search) and search[si] not in all_strings:
+        #print(u"checking {}".format(search[si+1]))
         results.append(search[si])
         si += 1
     return results
 
-def get_pdf_lines(start_header,boxes,soup):
-    header_tag = soup.find("text",text=headers[start_header])
-    if header_tag is not None:
-        lines = find_to_next_header(TextBox(header_tag),headers,boxes)
+
+def check_box_values(boxList):
+    checkedBoxes = []
+    for box in boxList:
+        if box is not None:
+            isHeaderFound = False
+            for simpleHeader in simple_headers_to_check_boxes:
+                # we have found a header that may be in the same box as its value
+                simpleHeaderValue = simple_headers_to_check_boxes[simpleHeader][0]
+                if simpleHeaderValue in box.text:
+                    isHeaderFound = True
+                    longHeader = headers_to_check_boxes[simpleHeader][0]
+                    if longHeader in box.text:
+                        splitedBox = box.text.split(longHeader)
+                        if len(splitedBox) == 2:
+                            checkedBoxes.append(longHeader)
+                            if splitedBox[1].strip():
+                                checkedBoxes.append(splitedBox[1].strip())
+                    else:
+                        splitedBox = box.text.split(simpleHeaderValue)
+                        if len(splitedBox) == 2:
+                            checkedBoxes.append(simpleHeaderValue)
+                            if splitedBox[1].strip():
+                                checkedBoxes.append(splitedBox[1].strip())
+            if not isHeaderFound and box.text.strip():
+                checkedBoxes.append(box.text.strip())
+    return checkedBoxes
+
+
+def get_pdf_lines(start_header,boxes,soup,isEnglishDocument,issecondtry):
+    headersToCheck = {}
+    headersToRead = {}
+    if issecondtry and not isEnglishDocument:
+        headersToCheck = all_splited_headers
+        headersToRead = headers_new_format
+    else:
+        if isEnglishDocument:
+            headersToCheck = english_headers
+            headersToRead = english_headers
+        else:
+            headersToCheck = headers
+            headersToRead = headers
+    #header_tag = soup.find("text",text=headersToRead[start_header])
+    header_tag = ""
+    for b in boxes:
+        if b == headersToRead[start_header][0]:
+            header_tag = b
+            break;
+        
+    if header_tag is not "":
+        lines = find_to_next_header(header_tag,headersToCheck,boxes)
         return lines
     else:
         return None
