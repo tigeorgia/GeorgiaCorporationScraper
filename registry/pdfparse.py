@@ -147,7 +147,7 @@ def find_to_next_header(start, headers, search):
 def check_box_values(boxList):
     checkedBoxes = []
     for box in boxList:
-        if box is not None:
+        if box is not None and box.text is not None:
             isHeaderFound = False
             for simpleHeader in simple_headers_to_check_boxes:
                 # we have found a header that may be in the same box as its value

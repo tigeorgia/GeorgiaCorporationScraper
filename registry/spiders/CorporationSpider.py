@@ -169,6 +169,7 @@ class CorporationSpider(BaseSpider):
             dbid = b.parent['onclick'].split(u"(")[-1].rstrip(u")")
             #log.msg("Found dbid: {}".format(dbid))
             corp_url = self.base_url+u"?c=app&m=show_legal_person&legal_code_id={}".format(dbid)
+            log.msg("Corp url:" + corp_url)
             request = Request(url=corp_url,callback=self.parse_corpdetails)
             request.meta['id_code_reestri_db'] = dbid
             request.meta['cookiejar'] = response.meta['cookiejar']
@@ -232,9 +233,12 @@ class CorporationSpider(BaseSpider):
         corp['id_code_reestri_db'] = response.meta['id_code_reestri_db']
        
         # The status cell has some cruft in it, so the easy method doesn't work
-        corp['status'] = soup.find("td", text=u"სტატუსი").find_next_sibling("td").div.string
-        if (corp['status'] is not None):
-            corp['status'] = corp['status'].strip()
+        status_tmp = soup.find("td", text=u"სტატუსი").find_next_sibling("td")
+        corp['status'] = None
+        if status_tmp is not None:
+            corp['status'] = status_tmp.div.string
+            if (corp['status'] is not None):
+                corp['status'] = corp['status'].strip()
         
         corp['no_docs'] = True
         #results.append(corp)
@@ -314,7 +318,10 @@ class CorporationSpider(BaseSpider):
                 # Second contains title, date
                 # Third is blank
                 cells = row.find_all("td")
-                link = cells[0].a["href"]
+                link = ""
+                if cells[0] is not None:
+                    link = cells[0].a["href"]
+                    
                 spans = cells[1].find_all("span")
                 title = spans[0].string
                 date = spans[1].string
@@ -339,7 +346,9 @@ class CorporationSpider(BaseSpider):
 
             for row in status_table.find_all("tr"):
                 cells = row.find_all("td")
-                link = cells[0].a["href"]
+                link = ""
+                if cells[0] is not None:
+                    link = cells[0].a["href"]
                 registration_num = cells[1].find(class_="maintxt").string
                 date = cells[1].find(class_="smalltxt").string
                 title = cells[2].find(style=True).string
@@ -365,7 +374,9 @@ class CorporationSpider(BaseSpider):
 
             for row in scanned_table.find_all("tr"):
                 cells = row.find_all("td")
-                link = cells[0].a["href"]
+                link = ""
+                if cells[0] is not None:
+                    link = cells[0].a["href"]
                 doc_info = cells[1].find_all(class_="maintxt")
                 if (len(doc_info) == 2):
                     title = doc_info[0].string
@@ -500,71 +511,68 @@ class CorporationSpider(BaseSpider):
         georgianEntityTitle = u"სუბიექტი"
         isGeorgianDocToParse = soup.find("text",text=georgianEntityTitle)
         
-        if (isGeorgianDocToParse or isEnglishDocument):
-        
-            #boxes = pdfparse.remove_duplicates(boxes) # Handily, this sorts too
-            # TextBoxes define sort order as top-to-bottom, left-to-right.
-           
-            # TODO: Check for malformed / Blank / Something else extracts
-            extract = RegistryExtract()
-            extract['fk_corp_id_code'] = corp_id_code
-            extract['corp_url'] = url
-    
-            # Get extract date.
-            date_lines = pdfparse.get_pdf_lines('extract_date',boxes,soup,isEnglishDocument,False)
-            if date_lines is not None:
-                extract['date'] = u"".join([tb for tb in date_lines])
-    
-            # Get mailing address
-            address_lines = pdfparse.get_pdf_lines('address',boxes,soup,isEnglishDocument,False)
+        # TextBoxes define sort order as top-to-bottom, left-to-right.
+       
+        # TODO: Check for malformed / Blank / Something else extracts
+        extract = RegistryExtract()
+        extract['fk_corp_id_code'] = corp_id_code
+        extract['corp_url'] = url
+
+        # Get extract date.
+        date_lines = pdfparse.get_pdf_lines('extract_date',boxes,soup,isEnglishDocument,False)
+        if date_lines is not None:
+            extract['date'] = u"".join([tb for tb in date_lines])
+
+        # Get mailing address
+        address_lines = pdfparse.get_pdf_lines('address',boxes,soup,isEnglishDocument,False)
+        if address_lines is not None:
+            s = u"".join([tb for tb in address_lines])
+            log.msg("Found address, printing: ", level=log.DEBUG)
+            # TODO: Metrics to check whether we've mis-parsed.
+            extract['corp_address'] = s
+            log.msg(unicode(s),level=log.DEBUG)
+        else:
+            address_lines = pdfparse.get_pdf_lines('address',boxes,soup,isEnglishDocument,True)
             if address_lines is not None:
                 s = u"".join([tb for tb in address_lines])
-                log.msg("Found address, printing: ", level=log.DEBUG)
+                log.msg("Found address on 2nd try, printing: ", level=log.DEBUG)
                 # TODO: Metrics to check whether we've mis-parsed.
                 extract['corp_address'] = s
                 log.msg(unicode(s),level=log.DEBUG)
             else:
-                address_lines = pdfparse.get_pdf_lines('address',boxes,soup,isEnglishDocument,True)
-                if address_lines is not None:
-                    s = u"".join([tb for tb in address_lines])
-                    log.msg("Found address on 2nd try, printing: ", level=log.DEBUG)
-                    # TODO: Metrics to check whether we've mis-parsed.
-                    extract['corp_address'] = s
-                    log.msg(unicode(s),level=log.DEBUG)
-                else:
-                    log.msg("No address found.", level=log.DEBUG)
-                    
-            # Get legal form
-            legalform_lines = pdfparse.get_pdf_lines('legal_form',boxes,soup,isEnglishDocument,False)
+                log.msg("No address found.", level=log.DEBUG)
+                
+        # Get legal form
+        legalform_lines = pdfparse.get_pdf_lines('legal_form',boxes,soup,isEnglishDocument,False)
+        if legalform_lines is not None:
+            log.msg("Found legal form, printing: ", level=log.DEBUG)
+            s = u"".join([tb for tb in legalform_lines])
+            # TODO: Metrics to check whether we've mis-parsed.
+            extract['corp_legalform'] = s
+            log.msg(unicode(s),level=log.DEBUG)
+        else:
+            legalform_lines = pdfparse.get_pdf_lines('legal_form',boxes,soup,isEnglishDocument,True)
             if legalform_lines is not None:
-                log.msg("Found legal form, printing: ", level=log.DEBUG)
+                log.msg("Found legal form on 2nd try, printing: ", level=log.DEBUG)
                 s = u"".join([tb for tb in legalform_lines])
                 # TODO: Metrics to check whether we've mis-parsed.
                 extract['corp_legalform'] = s
                 log.msg(unicode(s),level=log.DEBUG)
             else:
-                legalform_lines = pdfparse.get_pdf_lines('legal_form',boxes,soup,isEnglishDocument,True)
-                if legalform_lines is not None:
-                    log.msg("Found legal form on 2nd try, printing: ", level=log.DEBUG)
-                    s = u"".join([tb for tb in legalform_lines])
-                    # TODO: Metrics to check whether we've mis-parsed.
-                    extract['corp_legalform'] = s
-                    log.msg(unicode(s),level=log.DEBUG)
-                else:
-                    log.msg("No legal form found.", level=log.DEBUG)
-    
-            # Get email address
-            email_lines = pdfparse.get_pdf_lines('email',boxes,soup,isEnglishDocument,False)
-            if email_lines is not None:
-                log.msg("Found email, printing: ", level=log.DEBUG)
-                s = u"".join([tb for tb in email_lines])
-                log.msg(unicode(s), level=log.DEBUG)
-                # TODO: Validate email address to check for mis-parse
-                extract['corp_email'] = s
-            else:
-                log.msg("No email found.", level=log.DEBUG)
-            
-            results.append(extract)
+                log.msg("No legal form found.", level=log.DEBUG)
+
+        # Get email address
+        email_lines = pdfparse.get_pdf_lines('email',boxes,soup,isEnglishDocument,False)
+        if email_lines is not None:
+            log.msg("Found email, printing: ", level=log.DEBUG)
+            s = u"".join([tb for tb in email_lines])
+            log.msg(unicode(s), level=log.DEBUG)
+            # TODO: Validate email address to check for mis-parse
+            extract['corp_email'] = s
+        else:
+            log.msg("No email found.", level=log.DEBUG)
+        
+        results.append(extract)
 
 
         # Parse directors
