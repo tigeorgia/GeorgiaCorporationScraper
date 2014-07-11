@@ -91,6 +91,13 @@ class CorporationSpider(BaseSpider):
         # they need to get renewed.
         if 'renew' in response.meta:
             form_data['p'] = response.meta['page']
+            # just a check making sure that we're passing a string
+            type_str = ""
+            if isinstance(response.meta['cookiejar'], basestring):
+                type_str = response.meta['cookiejar']
+            else:
+                type_str = str(response.meta['cookiejar'])
+            
             request = FormRequest(self.base_url,
                               dont_filter=True,
                               formdata=form_data,
@@ -98,7 +105,7 @@ class CorporationSpider(BaseSpider):
                               meta={'cookiejar': response.meta['cookiejar'],
                                     'total': response.meta['total'],
                                     'page': response.meta['page'],
-                                    'type': response.meta['cookiejar'],
+                                    'type': type_str,
                                     })
             yield request
         # Otherwise, this is our first time viewing this result type, and
@@ -570,8 +577,15 @@ class CorporationSpider(BaseSpider):
             # TODO: Validate email address to check for mis-parse
             extract['corp_email'] = s
         else:
-            log.msg("No email found.", level=log.DEBUG)
-        
+            email_lines = pdfparse.get_pdf_lines('email-short',boxes,soup,False)
+            if email_lines is not None:
+                s = u"".join([tb for tb in email_lines])
+                # TODO: Validate email address to check for mis-parse
+                extract['corp_email'] = s
+                print "corp_email: " + extract['corp_email']
+            else:
+                log.msg("No email found.", level=log.DEBUG)
+            
         results.append(extract)
 
 
