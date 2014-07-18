@@ -571,18 +571,16 @@ class CorporationSpider(BaseSpider):
         # Get email address
         email_lines = pdfparse.get_pdf_lines('email',boxes,soup,isEnglishDocument,False)
         if email_lines is not None:
-            log.msg("Found email, printing: ", level=log.DEBUG)
             s = u"".join([tb for tb in email_lines])
             log.msg(unicode(s), level=log.DEBUG)
             # TODO: Validate email address to check for mis-parse
             extract['corp_email'] = s
         else:
-            email_lines = pdfparse.get_pdf_lines('email-short',boxes,soup,False)
+            email_lines = pdfparse.get_pdf_lines('email-short',boxes,soup,isEnglishDocument,False)
             if email_lines is not None:
                 s = u"".join([tb for tb in email_lines])
                 # TODO: Validate email address to check for mis-parse
                 extract['corp_email'] = s
-                print "corp_email: " + extract['corp_email']
             else:
                 log.msg("No email found.", level=log.DEBUG)
             
